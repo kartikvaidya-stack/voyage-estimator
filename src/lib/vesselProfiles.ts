@@ -1,5 +1,5 @@
-// src/lib/vesselProfiles.ts
 export type VesselClass =
+  | "unknown"
   | "handysize"
   | "handymax"
   | "supramax"
@@ -10,187 +10,80 @@ export type VesselClass =
   | "mr"
   | "lr1"
   | "lr2"
-  | "vlcc"
   | "aframax"
   | "suezmax"
-  | "unknown";
+  | "vlcc";
 
 export type VesselProfile = {
   vesselClass: VesselClass;
   label: string;
-
-  // Typical commercial defaults (editable in UI)
   ladenSpeedKn: number;
-  ballastSpeedKn: number;
-
   ladenConsMtPerDay: number;
-  ballastConsMtPerDay: number;
-
-  // Typical port consumption (editable in UI)
   portConsMtPerDay: number;
 };
 
-// IMPORTANT: These are "starter defaults" to make the tool feel shipping-native.
-// Users can override anytime. We will show in UI later as "assumed from profile".
-export const VESSEL_PROFILES: Record<VesselClass, VesselProfile> = {
-  handysize: {
-    vesselClass: "handysize",
-    label: "Handysize (std)",
-    ladenSpeedKn: 12.0,
-    ballastSpeedKn: 12.5,
-    ladenConsMtPerDay: 22,
-    ballastConsMtPerDay: 20,
-    portConsMtPerDay: 3.5,
-  },
-  handymax: {
-    vesselClass: "handymax",
-    label: "Handymax (std)",
-    ladenSpeedKn: 12.0,
-    ballastSpeedKn: 12.5,
-    ladenConsMtPerDay: 24,
-    ballastConsMtPerDay: 22,
-    portConsMtPerDay: 3.8,
-  },
-  supramax: {
-    vesselClass: "supramax",
-    label: "Supramax (std)",
-    ladenSpeedKn: 12.5,
-    ballastSpeedKn: 13.0,
-    ladenConsMtPerDay: 26,
-    ballastConsMtPerDay: 24,
-    portConsMtPerDay: 4.0,
-  },
-  ultramax: {
-    vesselClass: "ultramax",
-    label: "Ultramax (std)",
-    ladenSpeedKn: 12.5,
-    ballastSpeedKn: 13.0,
-    ladenConsMtPerDay: 28,
-    ballastConsMtPerDay: 26,
-    portConsMtPerDay: 4.0,
-  },
-  panamax: {
-    vesselClass: "panamax",
-    label: "Panamax (std)",
-    ladenSpeedKn: 12.5,
-    ballastSpeedKn: 13.0,
-    ladenConsMtPerDay: 32,
-    ballastConsMtPerDay: 30,
-    portConsMtPerDay: 5.0,
-  },
-  kamsarmax: {
-    vesselClass: "kamsarmax",
-    label: "Kamsarmax (std)",
-    ladenSpeedKn: 12.5,
-    ballastSpeedKn: 13.0,
-    ladenConsMtPerDay: 33,
-    ballastConsMtPerDay: 31,
-    portConsMtPerDay: 5.0,
-  },
-  capesize: {
-    vesselClass: "capesize",
-    label: "Capesize (std)",
-    ladenSpeedKn: 12.0,
-    ballastSpeedKn: 12.5,
-    ladenConsMtPerDay: 45,
-    ballastConsMtPerDay: 42,
-    portConsMtPerDay: 6.5,
-  },
+const PROFILES: Record<VesselClass, VesselProfile> = {
+  unknown: { vesselClass: "unknown", label: "Unknown (no defaults)", ladenSpeedKn: 0, ladenConsMtPerDay: 0, portConsMtPerDay: 0 },
 
-  // Tankers (starter defaults)
-  mr: {
-    vesselClass: "mr",
-    label: "MR (std)",
-    ladenSpeedKn: 13.0,
-    ballastSpeedKn: 13.5,
-    ladenConsMtPerDay: 24,
-    ballastConsMtPerDay: 22,
-    portConsMtPerDay: 5.5,
-  },
-  lr1: {
-    vesselClass: "lr1",
-    label: "LR1 (std)",
-    ladenSpeedKn: 13.0,
-    ballastSpeedKn: 13.5,
-    ladenConsMtPerDay: 30,
-    ballastConsMtPerDay: 28,
-    portConsMtPerDay: 6.0,
-  },
-  lr2: {
-    vesselClass: "lr2",
-    label: "LR2 (std)",
-    ladenSpeedKn: 13.0,
-    ballastSpeedKn: 13.5,
-    ladenConsMtPerDay: 38,
-    ballastConsMtPerDay: 35,
-    portConsMtPerDay: 6.5,
-  },
-  aframax: {
-    vesselClass: "aframax",
-    label: "Aframax (std)",
-    ladenSpeedKn: 12.5,
-    ballastSpeedKn: 13.0,
-    ladenConsMtPerDay: 40,
-    ballastConsMtPerDay: 37,
-    portConsMtPerDay: 7.0,
-  },
-  suezmax: {
-    vesselClass: "suezmax",
-    label: "Suezmax (std)",
-    ladenSpeedKn: 12.5,
-    ballastSpeedKn: 13.0,
-    ladenConsMtPerDay: 48,
-    ballastConsMtPerDay: 45,
-    portConsMtPerDay: 7.5,
-  },
-  vlcc: {
-    vesselClass: "vlcc",
-    label: "VLCC (std)",
-    ladenSpeedKn: 12.0,
-    ballastSpeedKn: 12.5,
-    ladenConsMtPerDay: 58,
-    ballastConsMtPerDay: 55,
-    portConsMtPerDay: 8.0,
-  },
+  // Dry bulk (typical ballpark “standard ship” assumptions for early estimate)
+  handysize: { vesselClass: "handysize", label: "Handysize", ladenSpeedKn: 12.0, ladenConsMtPerDay: 20, portConsMtPerDay: 3.5 },
+  handymax: { vesselClass: "handymax", label: "Handymax", ladenSpeedKn: 12.5, ladenConsMtPerDay: 23, portConsMtPerDay: 3.8 },
+  supramax: { vesselClass: "supramax", label: "Supramax", ladenSpeedKn: 12.5, ladenConsMtPerDay: 26, portConsMtPerDay: 4.0 },
+  ultramax: { vesselClass: "ultramax", label: "Ultramax", ladenSpeedKn: 13.0, ladenConsMtPerDay: 28, portCons_mt_per_day: undefined } as any, // patched below
+  panamax: { vesselClass: "panamax", label: "Panamax", ladenSpeedKn: 13.0, ladenConsMtPerDay: 32, portConsMtPerDay: 4.8 },
+  kamsarmax: { vesselClass: "kamsarmax", label: "Kamsarmax", ladenSpeedKn: 13.0, ladenConsMtPerDay: 33, portConsMtPerDay: 5.0 },
+  capesize: { vesselClass: "capesize", label: "Capesize", ladenSpeedKn: 13.5, ladenConsMtPerDay: 50, portConsMtPerDay: 7.0 },
 
-  unknown: {
-    vesselClass: "unknown",
-    label: "Unknown (leave current)",
-    ladenSpeedKn: 12.5,
-    ballastSpeedKn: 13.0,
-    ladenConsMtPerDay: 28,
-    ballastConsMtPerDay: 26,
-    portConsMtPerDay: 4.0,
-  },
+  // Tankers (very rough, intended for quick TCE sanity checks)
+  mr: { vesselClass: "mr", label: "MR (Products)", ladenSpeedKn: 13.5, ladenConsMtPerDay: 28, portConsMtPerDay: 6.0 },
+  lr1: { vesselClass: "lr1", label: "LR1 (Products)", ladenSpeedKn: 14.0, ladenConsMtPerDay: 36, portConsMtPerDay: 7.5 },
+  lr2: { vesselClass: "lr2", label: "LR2 (Products)", ladenSpeedKn: 14.0, ladenConsMtPerDay: 40, portConsMtPerDay: 8.0 },
+  aframax: { vesselClass: "aframax", label: "Aframax", ladenSpeedKn: 13.0, ladenConsMtPerDay: 45, portConsMtPerDay: 10.0 },
+  suezmax: { vesselClass: "suezmax", label: "Suezmax", ladenSpeedKn: 13.5, ladenConsMtPerDay: 55, portConsMtPerDay: 12.0 },
+  vlcc: { vesselClass: "vlcc", label: "VLCC", ladenSpeedKn: 13.0, ladenConsMtPerDay: 75, portConsMtPerDay: 15.0 },
 };
 
-const KEYWORDS: Array<{ k: string[]; v: VesselClass }> = [
-  { k: ["ultramax", "u-max", "umax"], v: "ultramax" },
-  { k: ["supramax", "supra"], v: "supramax" },
-  { k: ["handysize"], v: "handysize" },
-  { k: ["handymax"], v: "handymax" },
-  { k: ["panamax", "pmx"], v: "panamax" },
-  { k: ["kamsarmax", "kmax"], v: "kamsarmax" },
-  { k: ["cape", "capesize"], v: "capesize" },
+// Patch typo safely (keeps TS happy in strict mode without rewriting above block)
+(PROFILES.ultramax as any).portConsMtPerDay = 4.2;
 
-  { k: ["mr"], v: "mr" },
-  { k: ["lr1"], v: "lr1" },
-  { k: ["lr2"], v: "lr2" },
-  { k: ["aframax"], v: "aframax" },
-  { k: ["suezmax"], v: "suezmax" },
-  { k: ["vlcc"], v: "vlcc" },
-];
+export function getProfile(vesselClass: VesselClass): VesselProfile {
+  return PROFILES[vesselClass] || PROFILES.unknown;
+}
 
-export function detectVesselClassFromText(text: string): VesselClass {
-  const t = (text || "").toLowerCase();
-  for (const row of KEYWORDS) {
-    for (const kw of row.k) {
-      if (t.includes(kw)) return row.v;
-    }
-  }
+/**
+ * Detect vessel class from free text.
+ * We intentionally use broad, shipping-native aliases.
+ */
+export function detectVesselClass(text: string): VesselClass {
+  const t = String(text || "").toLowerCase();
+
+  // Tankers first (MR/LR etc can appear in other contexts)
+  if (matchesAny(t, ["vlcc"])) return "vlcc";
+  if (matchesAny(t, ["suezmax", "suez max", "suez"])) return "suezmax";
+  if (matchesAny(t, ["aframax", "afra max", "afra"])) return "aframax";
+  if (matchesAny(t, ["lr2", "lr-2", "long range 2", "lr 2"])) return "lr2";
+  if (matchesAny(t, ["lr1", "lr-1", "long range 1", "lr 1"])) return "lr1";
+  // MR: guard against false matches (e.g., "mr smith")
+  if (matchesRegex(t, /\bmr\b/) || matchesAny(t, ["m/r", "m r", "medium range"])) return "mr";
+
+  // Dry bulk
+  if (matchesAny(t, ["capesize", "cape size", "cape"])) return "capesize";
+  if (matchesAny(t, ["kamsarmax", "kamsar max", "kmax", "k-max"])) return "kamsarmax";
+  if (matchesAny(t, ["panamax", "pmax", "pmx", "p/mx"])) return "panamax";
+  if (matchesAny(t, ["ultramax", "ultra max", "umax", "u/max", "u-max"])) return "ultramax";
+  if (matchesAny(t, ["supramax", "supra max", "supra", "smax", "s/max"])) return "supramax";
+  if (matchesAny(t, ["handymax", "handy max", "hmax", "h/max"])) return "handymax";
+  if (matchesAny(t, ["handysize", "handy size", "hsize", "h/size"])) return "handysize";
+
   return "unknown";
 }
 
-export function getProfile(vesselClass: VesselClass): VesselProfile {
-  return VESSEL_PROFILES[vesselClass] || VESSEL_PROFILES.unknown;
+function matchesAny(text: string, needles: string[]): boolean {
+  for (const n of needles) {
+    if (text.includes(n)) return true;
+  }
+  return false;
+}
+function matchesRegex(text: string, re: RegExp): boolean {
+  return re.test(text);
 }

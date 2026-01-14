@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { calcItinerary, round, solveFreightPerMtForTargetTCE } from "../lib/itineraryCalc";
 import { lookupDistanceNm, saveDistanceNm, clearUserRoutes } from "../lib/routeTable";
 import { getProfile, type VesselClass } from "../lib/vesselProfiles";
@@ -9,6 +9,8 @@ type PortType = "start" | "load" | "discharge" | "bunker" | "canal" | "other" | 
 type FreightType = "per_mt" | "lumpsum";
 type TradeMode = "dry" | "tanker";
 type VoyageMode = "oneway" | "round";
+
+type MobileTab = "summary" | "ports" | "legs" | "edit";
 
 type PortCallUI = {
   name: string;
@@ -70,7 +72,7 @@ const LS_VOYAGES_KEY = "VE_SAVED_VOYAGES_V1";
 
 const styles: Record<string, React.CSSProperties> = {
   page: {
-    padding: 28,
+    padding: 22,
     fontFamily: "Arial, sans-serif",
     maxWidth: 1250,
     margin: "0 auto",
@@ -78,35 +80,60 @@ const styles: Record<string, React.CSSProperties> = {
     minHeight: "100vh",
     color: "#0f172a",
   },
-  header: { display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 14 },
+  header: { display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 12 },
   title: { margin: 0, fontSize: 26, color: "#14213d" },
   subtitle: { margin: "6px 0 0", color: "#4b5563", lineHeight: 1.35 },
   badge: { padding: "8px 10px", borderRadius: 12, background: "#eef4ff", border: "1px solid #d7e3ff", color: "#1e3a8a", fontWeight: 800, fontSize: 12, whiteSpace: "nowrap" },
+
   grid: { display: "grid", gridTemplateColumns: "1.45fr 1fr", gap: 16 },
+
   card: { background: "#ffffff", border: "1px solid #e6eaf2", padding: 16, borderRadius: 14, boxShadow: "0 6px 18px rgba(20, 30, 60, 0.06)" },
   sectionTitle: { margin: "14px 0 8px", fontSize: 15, color: "#0f172a" },
   small: { color: "#64748b", fontSize: 12, lineHeight: 1.35 },
+
   btnRow: { display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 },
   btn: { padding: "10px 12px", borderRadius: 12, border: "1px solid #d7e3ff", background: "#eef4ff", cursor: "pointer", fontWeight: 800, color: "#1e3a8a" },
   btnDark: { padding: "10px 12px", borderRadius: 12, border: "1px solid #111827", background: "#111827", cursor: "pointer", fontWeight: 900, color: "#ffffff" },
   btnDanger: { padding: "10px 12px", borderRadius: 12, border: "1px solid #fecaca", background: "#fff1f2", cursor: "pointer", fontWeight: 800, color: "#9f1239" },
+
   table: { width: "100%", borderCollapse: "separate", borderSpacing: "0 8px", minWidth: 980 },
   th: { textAlign: "left", fontSize: 12, color: "#64748b", padding: "0 8px" },
   td: { padding: "0 8px", verticalAlign: "top" },
+
   input: { width: "100%", padding: 10, borderRadius: 10, border: "1px solid #d9e0ee", outline: "none", background: "#fbfdff" },
+  inputTouch: { width: "100%", padding: 14, borderRadius: 12, border: "1px solid #d9e0ee", outline: "none", background: "#fbfdff", fontSize: 16 },
   select: { width: "100%", padding: 10, borderRadius: 10, border: "1px solid #d9e0ee", background: "#fbfdff" },
+  selectTouch: { width: "100%", padding: 14, borderRadius: 12, border: "1px solid #d9e0ee", background: "#fbfdff", fontSize: 16 },
   textarea: { width: "100%", padding: 12, borderRadius: 12, border: "1px solid #d9e0ee", outline: "none", background: "#fbfdff", minHeight: 110, resize: "vertical", fontFamily: "inherit", lineHeight: 1.35 },
+
   warn: { padding: 12, background: "#fff7ed", borderRadius: 12, border: "1px solid #fed7aa", color: "#9a3412", whiteSpace: "pre-wrap" },
   info: { padding: 12, background: "#ecfeff", borderRadius: 12, border: "1px solid #a5f3fc", color: "#0e7490", whiteSpace: "pre-wrap" },
+
   kv: { display: "flex", justifyContent: "space-between", padding: "5px 0" },
   kvLabel: { color: "#334155", fontSize: 13 },
   kvValue: { fontWeight: 800, color: "#0f172a" },
+
   tceBox: { marginTop: 14, padding: 14, borderRadius: 14, border: "1px solid #d7e3ff", background: "#eef4ff" },
   tceTitle: { fontSize: 12, color: "#1e3a8a", fontWeight: 900, letterSpacing: 0.3 },
-  tceValue: { fontSize: 36, fontWeight: 900, marginTop: 4, color: "#0b1b4f" },
+  tceValue: { fontSize: 40, fontWeight: 900, marginTop: 4, color: "#0b1b4f" },
+
   divider: { height: 1, background: "#edf2f7", margin: "12px 0" },
   miniBtn: { padding: "8px 10px", borderRadius: 10, border: "1px solid #d7e3ff", background: "#eef4ff", cursor: "pointer", fontWeight: 900, color: "#1e3a8a", width: "100%" },
+
   twoCol: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 10 },
+
+  tabsRow: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 },
+  tab: { padding: "10px 12px", borderRadius: 999, border: "1px solid #d7e3ff", background: "#ffffff", cursor: "pointer", fontWeight: 900, color: "#1e3a8a" },
+  tabActive: { padding: "10px 12px", borderRadius: 999, border: "1px solid #1e3a8a", background: "#eef4ff", cursor: "pointer", fontWeight: 900, color: "#1e3a8a" },
+
+  hScroll: {
+    overflowX: "auto",
+    WebkitOverflowScrolling: "touch",
+    borderRadius: 12,
+    border: "1px solid #eef2ff",
+    padding: 6,
+    background: "#fafcff",
+  },
 };
 
 function defaultVoyage(): VoyageUI {
@@ -154,7 +181,6 @@ function cloneVoyage(v: VoyageUI): VoyageUI {
 }
 
 export default function Page() {
-  // Mobile layout switch (no refactor)
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 900);
@@ -163,8 +189,10 @@ export default function Page() {
     return () => window.removeEventListener("resize", check);
   }, []);
 
+  const [mobileTab, setMobileTab] = useState<MobileTab>("summary");
+
   const [aiText, setAiText] = useState<string>(
-    "Umax open Singapore. Load Palembang coal about 55,000 mt at 8k shinc. Discharge Vizag and Kandla at 10k pwwd. Target 16,000 USD/day TCE. Bunkers Singapore."
+    "Umax open Singapore. Load Palembang coal about 55,000 mt at 8k shinc. Discharge Vizag and Kandla at 10k pwwd. Target 16,000 USD/day TCE. Bunkers Singapore before sailing."
   );
   const [aiError, setAiError] = useState<string>("");
   const [aiRaw, setAiRaw] = useState<string>("");
@@ -194,6 +222,9 @@ export default function Page() {
 
   const [lastVesselClass, setLastVesselClass] = useState<VesselClass>("unknown");
   const [lastDerived, setLastDerived] = useState<any>(null);
+
+  const portsTableRef = useRef<HTMLDivElement | null>(null);
+  const legsTableRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => setSavedList(getSavedVoyages()), []);
 
@@ -311,6 +342,8 @@ export default function Page() {
 
     setLastVesselClass("unknown");
     setLastDerived(null);
+
+    if (isMobile) setMobileTab("summary");
   }
 
   function fillDistances() {
@@ -338,6 +371,7 @@ export default function Page() {
 
     setLegs(next);
     setMsg(missing.length ? `Distances updated: ${updated}. Missing:\n- ${missing.join("\n- ")}` : `Distances updated: ${updated}. 0 missing.`);
+    if (isMobile) setMobileTab("summary");
   }
 
   function saveLeg(idx: number) {
@@ -410,6 +444,7 @@ export default function Page() {
     setPortCalls(pc);
     rebuildLegsFromPorts(pc);
     setMsg(`Round voyage applied. Return port: ${ret}. Now click Fill Distances.`);
+    if (isMobile) setMobileTab("edit");
   }
 
   function applyTradePreset(mode: TradeMode) {
@@ -461,10 +496,8 @@ export default function Page() {
 
   function applyVesselProfileToTables(vesselClass: VesselClass) {
     const profile = getProfile(vesselClass);
-    // If unknown, do nothing
     if (!profile || vesselClass === "unknown") return { applied: false, profileLabel: "" };
 
-    // Apply defaults: speed/cons to legs ONLY if blank/zero
     setLegs((prev) =>
       prev.map((l) => {
         const sp = num(l.speed_kn) || 0;
@@ -477,7 +510,6 @@ export default function Page() {
       })
     );
 
-    // Apply port cons ONLY if blank/zero
     setPortCalls((prev) =>
       prev.map((p) => {
         const pc = num(p.port_cons_mt_per_day) || 0;
@@ -500,7 +532,6 @@ export default function Page() {
 
     const next = pc.map((p) => {
       const curDays = num(p.port_days);
-      // Only auto-fill if port_days is blank/0 for load/disch OR clearly missing
       const needsFill = curDays == null || curDays === 0 || isBlank(p.port_days);
 
       if (p.type === "load" && loadRate && loadRate > 0 && needsFill) {
@@ -551,7 +582,7 @@ export default function Page() {
         const lg: LegUI[] = aiDraft.legs.map((l: any) => ({
           from: l.from ?? "",
           to: l.to ?? "",
-          distance_nm: "", // always blank by design
+          distance_nm: "", // intentionally blank
           speed_kn: l.speed_kn == null ? "" : String(l.speed_kn),
           cons_mt_per_day: l.cons_mt_per_day == null ? "" : String(l.cons_mt_per_day),
         }));
@@ -583,10 +614,8 @@ export default function Page() {
       }));
     }
 
-    // Apply vessel defaults (fill blanks only)
     const prof = applyVesselProfileToTables(vesselClass);
 
-    // Apply port-days from text rates (fill blanks/0 only)
     const r = applyRatesToPortDays(derived, pcApplied);
     if (r.changed > 0) setPortCalls(r.pc);
 
@@ -599,6 +628,8 @@ export default function Page() {
         ? `Applied AI draft.\n${notes.join("\n")}\n\nNext: click Fill Distances.`
         : "Applied AI draft. Next: click Fill Distances."
     );
+
+    if (isMobile) setMobileTab("summary");
   }
 
   function makeVoyageSnapshot(name?: string): VoyageUI {
@@ -630,6 +661,7 @@ export default function Page() {
     setCosts(v.costs || defaultVoyage().costs);
     setTargetTce(v.targetTce || "0");
     setMsg(`Loaded voyage: "${v.name || "Voyage"}"`);
+    if (isMobile) setMobileTab("summary");
   }
 
   function deleteSelectedVoyage() {
@@ -665,6 +697,7 @@ export default function Page() {
       setCosts(v.costs || defaultVoyage().costs);
       setTargetTce(v.targetTce || "0");
       setMsg("Imported voyage JSON.");
+      if (isMobile) setMobileTab("summary");
     } catch (e: any) {
       setMsg(`Import failed: ${String(e?.message || e)}`);
     }
@@ -719,42 +752,90 @@ Key assumptions:
 `;
     setSummaryText(txt);
     setMsg("Summary generated below. Copy it.");
+    if (isMobile) setMobileTab("summary");
   }
+
+  // --- v1.2: Desktop-first TCE banner (full width) ---
+  const showTceBanner = !isMobile && result?.status === "ok" && !result?.error;
+
+  function scrollToPortsTable() {
+    portsTableRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  function scrollToLegsTable() {
+    legsTableRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  const MobileTabs = () => (
+    <div style={styles.tabsRow}>
+      <button style={mobileTab === "summary" ? styles.tabActive : styles.tab} onClick={() => setMobileTab("summary")}>Summary</button>
+      <button style={mobileTab === "ports" ? styles.tabActive : styles.tab} onClick={() => setMobileTab("ports")}>Ports</button>
+      <button style={mobileTab === "legs" ? styles.tabActive : styles.tab} onClick={() => setMobileTab("legs")}>Legs</button>
+      <button style={mobileTab === "edit" ? styles.tabActive : styles.tab} onClick={() => setMobileTab("edit")}>Full Edit</button>
+    </div>
+  );
 
   return (
     <main style={styles.page}>
       <div style={styles.header}>
         <div>
-          <h1 style={styles.title}>Voyage Estimator — Upgraded (v1.1)</h1>
-          <p style={styles.subtitle}>Now includes New Voyage, mobile layout, vessel profiles, and port-days-from-text.</p>
+          <h1 style={styles.title}>Voyage Estimator — v1.2 (UI & Mobile)</h1>
+          <p style={styles.subtitle}>Owner TCE first on desktop. Mobile has Summary/Ports/Legs/Edit tabs.</p>
         </div>
-        <div style={styles.badge}>v1.1</div>
+        <div style={styles.badge}>v1.2</div>
       </div>
+
+      {showTceBanner && (
+        <section style={{ ...styles.card, marginBottom: 14 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 12, flexWrap: "wrap" }}>
+            <div>
+              <div style={styles.small}>Primary output</div>
+              <div style={{ fontSize: 14, fontWeight: 900, color: "#0f172a", marginTop: 2 }}>Owner TCE</div>
+            </div>
+            <div style={{ ...styles.tceBox, marginTop: 0, minWidth: 320 }}>
+              <div style={styles.tceTitle}>OWNER TCE</div>
+              <div style={styles.tceValue}>
+                {round(result.tce_usd_per_day, 0)}{" "}
+                <span style={{ fontSize: 14, fontWeight: 900 }}>/day</span>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {isMobile && <MobileTabs />}
 
       <div
         style={{
           ...styles.grid,
           gridTemplateColumns: isMobile ? "1fr" : "1.45fr 1fr",
+          gap: isMobile ? 12 : 16,
+          marginTop: isMobile ? 10 : 0,
         }}
       >
         <section style={styles.card}>
           <h2 style={{ margin: 0 }}>Setup</h2>
-          <div style={styles.small}>Choose mode, then AI draft or manual edit. “New Voyage” resets current case only.</div>
+          <div style={styles.small}>Desktop: full edit. Mobile: use Summary/Ports/Legs, and Full Edit only when needed.</div>
 
           <div style={styles.btnRow}>
             <button style={styles.btnDanger} onClick={newVoyage}>New Voyage</button>
             <button style={styles.btn} onClick={generateSummary}>Generate Summary</button>
+            {isMobile && (
+              <>
+                <button style={styles.btn} onClick={scrollToPortsTable}>Jump to Ports</button>
+                <button style={styles.btn} onClick={scrollToLegsTable}>Jump to Legs</button>
+              </>
+            )}
           </div>
 
           <div style={styles.twoCol}>
             <Field label="Trade mode">
-              <select style={styles.select} value={tradeMode} onChange={(e) => applyTradePreset(e.target.value as TradeMode)}>
+              <select style={isMobile ? styles.selectTouch : styles.select} value={tradeMode} onChange={(e) => applyTradePreset(e.target.value as TradeMode)}>
                 <option value="dry">Dry bulk</option>
                 <option value="tanker">Tanker</option>
               </select>
             </Field>
             <Field label="Voyage mode">
-              <select style={styles.select} value={voyageMode} onChange={(e) => setVoyageMode(e.target.value as VoyageMode)}>
+              <select style={isMobile ? styles.selectTouch : styles.select} value={voyageMode} onChange={(e) => setVoyageMode(e.target.value as VoyageMode)}>
                 <option value="oneway">One-way</option>
                 <option value="round">Round voyage</option>
               </select>
@@ -763,7 +844,7 @@ Key assumptions:
 
           <div style={styles.twoCol}>
             <Field label="Round return port">
-              <input style={styles.input} value={roundReturnPort} onChange={(e) => setRoundReturnPort(e.target.value)} />
+              <input style={isMobile ? styles.inputTouch : styles.input} value={roundReturnPort} onChange={(e) => setRoundReturnPort(e.target.value)} />
             </Field>
             <Field label="Prefer saved distances">
               <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
@@ -796,7 +877,7 @@ Key assumptions:
           <div style={styles.small}>
             Paste voyage description. AI drafts ports/legs. Distances remain blank by design.
             <br />
-            <b>New:</b> vessel type (e.g., Ultramax) can auto-fill speed/cons, and “8k shinc / 10k pwwd” can auto-fill port days.
+            <b>Tip:</b> “Bunker at Singapore before sailing” or “Bunker enroute at Fujairah between load and discharge”.
           </div>
 
           <textarea style={{ ...styles.textarea, marginTop: 10 }} value={aiText} onChange={(e) => setAiText(e.target.value)} />
@@ -818,222 +899,327 @@ Key assumptions:
             </div>
           )}
 
-          <div style={styles.divider} />
-
-          <h2 style={{ margin: 0 }}>Save / Load Voyages</h2>
-
-          <div style={styles.twoCol}>
-            <Field label="Save name">
-              <input style={styles.input} value={saveName} onChange={(e) => setSaveName(e.target.value)} />
-            </Field>
-            <Field label="Saved voyages">
-              <select style={styles.select} value={selectedSaveIdx} onChange={(e) => setSelectedSaveIdx(Number(e.target.value))}>
-                <option value={-1}>-- select --</option>
-                {savedList.map((v, idx) => (
-                  <option key={idx} value={idx}>
-                    {v.name || `Voyage ${idx + 1}`}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          </div>
-
-          <div style={styles.btnRow}>
-            <button style={styles.btn} onClick={saveVoyageTemplate}>Save Voyage Template</button>
-            <button style={styles.btn} onClick={loadVoyageTemplate}>Load</button>
-            <button style={styles.btnDanger} onClick={deleteSelectedVoyage}>Delete</button>
-            <button style={styles.btn} onClick={exportCurrentVoyage}>Export JSON</button>
-          </div>
-
-          <Field label="Export JSON (copy/share)">
-            <textarea style={{ ...styles.textarea, minHeight: 120 }} value={exportJson} onChange={(e) => setExportJson(e.target.value)} />
-          </Field>
-
-          <div style={styles.btnRow}>
-            <button style={styles.btn} onClick={importVoyageFromJson}>Import JSON</button>
-          </div>
-
-          <Field label="Import JSON (paste from colleague)">
-            <textarea style={{ ...styles.textarea, minHeight: 120 }} value={importJson} onChange={(e) => setImportJson(e.target.value)} />
-          </Field>
-
-          <div style={styles.divider} />
-
-          <div style={styles.sectionTitle}>Port calls</div>
-          <div style={{ overflowX: "auto" }}>
-            <table style={styles.table}>
-              <thead>
-                <tr>
-                  <th style={styles.th}>Port</th>
-                  <th style={styles.th}>Type</th>
-                  <th style={styles.th}>Port days</th>
-                  <th style={styles.th}>Waiting</th>
-                  <th style={styles.th}>Port cons</th>
-                  <th style={styles.th}>Port cost</th>
-                  <th style={styles.th}>Bunker buy</th>
-                  <th style={styles.th}>Bunker price</th>
-                </tr>
-              </thead>
-              <tbody>
-                {portCalls.map((p, idx) => (
-                  <tr key={idx}>
-                    <td style={styles.td}><input style={styles.input} value={p.name} onChange={(e) => updatePort(idx, "name", e.target.value, setPortCalls)} /></td>
-                    <td style={styles.td}>
-                      <select style={styles.select} value={p.type} onChange={(e) => updatePort(idx, "type", e.target.value as PortType, setPortCalls)}>
-                        <option value="start">start</option>
-                        <option value="load">load</option>
-                        <option value="discharge">discharge</option>
-                        <option value="bunker">bunker</option>
-                        <option value="canal">canal</option>
-                        <option value="other">other</option>
-                        <option value="end">end</option>
-                      </select>
-                    </td>
-                    <td style={styles.td}><input style={styles.input} value={p.port_days} onChange={(e) => updatePort(idx, "port_days", e.target.value, setPortCalls)} /></td>
-                    <td style={styles.td}><input style={styles.input} value={p.waiting_days} onChange={(e) => updatePort(idx, "waiting_days", e.target.value, setPortCalls)} /></td>
-                    <td style={styles.td}><input style={styles.input} value={p.port_cons_mt_per_day} onChange={(e) => updatePort(idx, "port_cons_mt_per_day", e.target.value, setPortCalls)} /></td>
-                    <td style={styles.td}><input style={styles.input} value={p.port_cost_usd} onChange={(e) => updatePort(idx, "port_cost_usd", e.target.value, setPortCalls)} /></td>
-                    <td style={styles.td}><input style={styles.input} value={p.bunker_purchase_qty_mt} onChange={(e) => updatePort(idx, "bunker_purchase_qty_mt", e.target.value, setPortCalls)} /></td>
-                    <td style={styles.td}><input style={styles.input} value={p.bunker_purchase_price_usd_per_mt} onChange={(e) => updatePort(idx, "bunker_purchase_price_usd_per_mt", e.target.value, setPortCalls)} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div style={styles.divider} />
-
-          <div style={styles.sectionTitle}>Legs</div>
-          <div style={{ overflowX: "auto" }}>
-            <table style={styles.table}>
-              <thead>
-                <tr>
-                  <th style={styles.th}>From</th>
-                  <th style={styles.th}>To</th>
-                  <th style={styles.th}>Distance (nm)</th>
-                  <th style={styles.th}>Speed (kn)</th>
-                  <th style={styles.th}>Sea cons</th>
-                  <th style={styles.th}>Save route</th>
-                </tr>
-              </thead>
-              <tbody>
-                {legs.map((l, idx) => (
-                  <tr key={idx}>
-                    <td style={styles.td}><input style={styles.input} value={l.from} onChange={(e) => updateLeg(idx, "from", e.target.value, setLegs)} /></td>
-                    <td style={styles.td}><input style={styles.input} value={l.to} onChange={(e) => updateLeg(idx, "to", e.target.value, setLegs)} /></td>
-                    <td style={styles.td}><input style={styles.input} value={l.distance_nm} onChange={(e) => updateLeg(idx, "distance_nm", e.target.value, setLegs)} /></td>
-                    <td style={styles.td}><input style={styles.input} value={l.speed_kn} onChange={(e) => updateLeg(idx, "speed_kn", e.target.value, setLegs)} /></td>
-                    <td style={styles.td}><input style={styles.input} value={l.cons_mt_per_day} onChange={(e) => updateLeg(idx, "cons_mt_per_day", e.target.value, setLegs)} /></td>
-                    <td style={styles.td}><button style={styles.miniBtn} onClick={() => saveLeg(idx)}>Save</button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div style={styles.divider} />
-
-          <div style={styles.sectionTitle}>Revenue & Costs</div>
-          <div style={styles.twoCol}>
-            <Field label="Cargo qty (mt)"><input style={styles.input} value={revenue.cargo_qty_mt} onChange={(e) => setRevenue((p) => ({ ...p, cargo_qty_mt: e.target.value }))} /></Field>
-            <Field label="Commission (%)"><input style={styles.input} value={revenue.commission_pct} onChange={(e) => setRevenue((p) => ({ ...p, commission_pct: e.target.value }))} /></Field>
-          </div>
-
-          <div style={styles.twoCol}>
-            <Field label="Freight type">
-              <select style={styles.select} value={revenue.freight_type} onChange={(e) => setRevenue((p) => ({ ...p, freight_type: e.target.value as FreightType }))}>
-                <option value="per_mt">$/mt</option>
-                <option value="lumpsum">Lumpsum</option>
-              </select>
-            </Field>
-            <Field label="Target TCE (USD/day) — solver">
-              <input style={styles.input} value={targetTce} onChange={(e) => setTargetTce(e.target.value)} />
-            </Field>
-          </div>
-
-          {revenue.freight_type === "per_mt" ? (
-            <Field label="Freight (USD/mt)"><input style={styles.input} value={revenue.freight_usd_per_mt} onChange={(e) => setRevenue((p) => ({ ...p, freight_usd_per_mt: e.target.value }))} /></Field>
-          ) : (
-            <Field label="Freight lumpsum (USD)"><input style={styles.input} value={revenue.freight_lumpsum_usd} onChange={(e) => setRevenue((p) => ({ ...p, freight_lumpsum_usd: e.target.value }))} /></Field>
-          )}
-
-          <div style={styles.twoCol}>
-            <Field label="Bunker blended price (USD/mt)"><input style={styles.input} value={costs.bunker_price_usd_per_mt} onChange={(e) => setCosts((p) => ({ ...p, bunker_price_usd_per_mt: e.target.value }))} /></Field>
-            <Field label="Canal/tolls (USD)"><input style={styles.input} value={costs.canal_tolls_usd} onChange={(e) => setCosts((p) => ({ ...p, canal_tolls_usd: e.target.value }))} /></Field>
-          </div>
-
-          <Field label="Other costs (USD)"><input style={styles.input} value={costs.other_costs_usd} onChange={(e) => setCosts((p) => ({ ...p, other_costs_usd: e.target.value }))} /></Field>
-        </section>
-
-        <section style={styles.card}>
-          <h2 style={{ margin: 0 }}>Results</h2>
-          <div style={styles.divider} />
-
-          {result?.error ? (
-            <div style={styles.warn}><b>Fix needed:</b> {result.error}</div>
-          ) : result?.status === "missing_distance" ? (
-            <div style={styles.warn}><b>{result.message}</b></div>
-          ) : (
+          {/* Mobile: show read-friendly ports/legs unless user chooses Full Edit */}
+          {isMobile && mobileTab !== "edit" && (
             <>
-              <div style={styles.sectionTitle}>Time</div>
-              <KV label="Sea days" value={round(result.sea_days_total, 2)} />
-              <KV label="Port days" value={round(result.port_days_total, 2)} />
-              <KV label="Waiting days" value={round(result.waiting_days_total, 2)} />
-              <KV label="Voyage days" value={round(result.voyage_days, 2)} />
-
               <div style={styles.divider} />
 
-              <div style={styles.sectionTitle}>Bunkers</div>
-              <KV label="Total required (mt)" value={round(result.bunkers_total, 1)} />
-              <KV label="Purchased (mt)" value={round(result.bunkers_purchased_total, 1)} />
-              <KV label="Bunker cost (USD)" value={round(result.bunker_cost, 0)} />
-
-              <div style={styles.divider} />
-
-              <div style={styles.sectionTitle}>Owner TCE</div>
-              <div style={styles.tceBox}>
-                <div style={styles.tceTitle}>OWNER TCE</div>
-                <div style={styles.tceValue}>
-                  {round(result.tce_usd_per_day, 0)} <span style={{ fontSize: 14, fontWeight: 900 }}>/day</span>
-                </div>
-              </div>
-
-              {solver && (
+              {mobileTab === "summary" && (
                 <>
-                  <div style={styles.divider} />
-                  <div style={styles.sectionTitle}>Freight solver ($/mt)</div>
-                  <KV label="Required freight (USD/mt)" value={round(solver.required_per_mt, 2)} />
+                  <h2 style={{ margin: 0 }}>Mobile Summary</h2>
+                  {result?.error ? (
+                    <div style={styles.warn}><b>Fix needed:</b> {result.error}</div>
+                  ) : result?.status === "missing_distance" ? (
+                    <div style={styles.warn}><b>{result.message}</b></div>
+                  ) : result?.status === "ok" ? (
+                    <>
+                      <div style={{ ...styles.tceBox, marginTop: 10 }}>
+                        <div style={styles.tceTitle}>OWNER TCE</div>
+                        <div style={styles.tceValue}>
+                          {round(result.tce_usd_per_day, 0)} <span style={{ fontSize: 14, fontWeight: 900 }}>/day</span>
+                        </div>
+                      </div>
+
+                      <div style={styles.sectionTitle}>Time</div>
+                      <KV label="Sea days" value={round(result.sea_days_total, 2)} />
+                      <KV label="Port days" value={round(result.port_days_total, 2)} />
+                      <KV label="Waiting days" value={round(result.waiting_days_total, 2)} />
+                      <KV label="Voyage days" value={round(result.voyage_days, 2)} />
+
+                      <div style={styles.divider} />
+
+                      <div style={styles.sectionTitle}>Bunkers</div>
+                      <KV label="Total required (mt)" value={round(result.bunkers_total, 1)} />
+                      <KV label="Purchased (mt)" value={round(result.bunkers_purchased_total, 1)} />
+                      <KV label="Bunker cost (USD)" value={round(result.bunker_cost, 0)} />
+
+                      {solver && (
+                        <>
+                          <div style={styles.divider} />
+                          <div style={styles.sectionTitle}>Freight solver ($/mt)</div>
+                          <KV label="Required freight (USD/mt)" value={round(solver.required_per_mt, 2)} />
+                        </>
+                      )}
+                    </>
+                  ) : (
+                    <div style={styles.small}>Fill distances to compute results.</div>
+                  )}
                 </>
               )}
 
+              {mobileTab === "ports" && (
+                <>
+                  <h2 style={{ margin: 0 }}>Ports (cards)</h2>
+                  <div style={styles.small}>Use Full Edit tab to change values. This view is for quick reading.</div>
+                  <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
+                    {portCalls.map((p, idx) => (
+                      <div key={idx} style={{ border: "1px solid #e6eaf2", borderRadius: 14, padding: 12, background: "#ffffff" }}>
+                        <div style={{ fontWeight: 900 }}>{p.name || `Port ${idx + 1}`}</div>
+                        <div style={styles.small}>
+                          Type: <b>{p.type}</b> • Port days: <b>{p.port_days || "0"}</b> • Waiting: <b>{p.waiting_days || "0"}</b>
+                        </div>
+                        <div style={styles.small}>
+                          Port cons: <b>{p.port_cons_mt_per_day || "0"}</b> • Port cost: <b>{p.port_cost_usd || "0"}</b>
+                        </div>
+                        {(p.bunker_purchase_qty_mt || p.bunker_purchase_price_usd_per_mt) && (
+                          <div style={styles.small}>
+                            Bunker buy: <b>{p.bunker_purchase_qty_mt || "0"}</b> mt @ <b>{p.bunker_purchase_price_usd_per_mt || "0"}</b>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {mobileTab === "legs" && (
+                <>
+                  <h2 style={{ margin: 0 }}>Legs (cards)</h2>
+                  <div style={styles.small}>Distances can be filled via Fill Distances / Full Edit.</div>
+                  <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
+                    {legs.map((l, idx) => (
+                      <div key={idx} style={{ border: "1px solid #e6eaf2", borderRadius: 14, padding: 12, background: "#ffffff" }}>
+                        <div style={{ fontWeight: 900 }}>{l.from || "?"} → {l.to || "?"}</div>
+                        <div style={styles.small}>
+                          Distance: <b>{l.distance_nm || "-"}</b> nm • Speed: <b>{l.speed_kn || "-"}</b> kn • Sea cons: <b>{l.cons_mt_per_day || "-"}</b>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </>
+          )}
+
+          {/* Full Edit (desktop always; mobile when chosen) */}
+          {(!isMobile || mobileTab === "edit") && (
+            <>
+              <div style={styles.divider} />
+              <h2 style={{ margin: 0 }}>Save / Load Voyages</h2>
+
+              <div style={styles.twoCol}>
+                <Field label="Save name">
+                  <input style={isMobile ? styles.inputTouch : styles.input} value={saveName} onChange={(e) => setSaveName(e.target.value)} />
+                </Field>
+                <Field label="Saved voyages">
+                  <select style={isMobile ? styles.selectTouch : styles.select} value={selectedSaveIdx} onChange={(e) => setSelectedSaveIdx(Number(e.target.value))}>
+                    <option value={-1}>-- select --</option>
+                    {savedList.map((v, idx) => (
+                      <option key={idx} value={idx}>
+                        {v.name || `Voyage ${idx + 1}`}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
+
+              <div style={styles.btnRow}>
+                <button style={styles.btn} onClick={saveVoyageTemplate}>Save Voyage Template</button>
+                <button style={styles.btn} onClick={loadVoyageTemplate}>Load</button>
+                <button style={styles.btnDanger} onClick={deleteSelectedVoyage}>Delete</button>
+                <button style={styles.btn} onClick={exportCurrentVoyage}>Export JSON</button>
+              </div>
+
+              <Field label="Export JSON (copy/share)">
+                <textarea style={{ ...styles.textarea, minHeight: 120 }} value={exportJson} onChange={(e) => setExportJson(e.target.value)} />
+              </Field>
+
+              <div style={styles.btnRow}>
+                <button style={styles.btn} onClick={importVoyageFromJson}>Import JSON</button>
+              </div>
+
+              <Field label="Import JSON (paste from colleague)">
+                <textarea style={{ ...styles.textarea, minHeight: 120 }} value={importJson} onChange={(e) => setImportJson(e.target.value)} />
+              </Field>
+
               <div style={styles.divider} />
 
-              <div style={styles.sectionTitle}>Sensitivity (TCE impact)</div>
-              {!sensitivity ? (
-                <div style={styles.small}>Fill distances first to see sensitivity.</div>
-              ) : (
-                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <div ref={portsTableRef} style={styles.sectionTitle}>Port calls</div>
+              <div style={styles.small}>On mobile, you can scroll this table left/right. If you hate this, use Ports tab (cards) for reading.</div>
+              <div style={styles.hScroll}>
+                <table style={styles.table}>
                   <thead>
                     <tr>
-                      <th style={{ textAlign: "left", fontSize: 12, color: "#64748b", padding: "6px 0" }}>Scenario</th>
-                      <th style={{ textAlign: "right", fontSize: 12, color: "#64748b", padding: "6px 0" }}>TCE</th>
-                      <th style={{ textAlign: "right", fontSize: 12, color: "#64748b", padding: "6px 0" }}>Δ vs base</th>
+                      <th style={styles.th}>Port</th>
+                      <th style={styles.th}>Type</th>
+                      <th style={styles.th}>Port days</th>
+                      <th style={styles.th}>Waiting</th>
+                      <th style={styles.th}>Port cons</th>
+                      <th style={styles.th}>Port cost</th>
+                      <th style={styles.th}>Bunker buy</th>
+                      <th style={styles.th}>Bunker price</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {sensitivity.rows.map((r: any, i: number) => (
-                      <tr key={i}>
-                        <td style={{ padding: "6px 0", fontSize: 13, color: "#0f172a" }}>{r.label}</td>
-                        <td style={{ padding: "6px 0", textAlign: "right", fontWeight: 800 }}>{r.tce != null ? round(r.tce, 0) : "-"}</td>
-                        <td style={{ padding: "6px 0", textAlign: "right", fontWeight: 800 }}>{r.delta != null ? round(r.delta, 0) : "-"}</td>
+                    {portCalls.map((p, idx) => (
+                      <tr key={idx}>
+                        <td style={styles.td}><input style={isMobile ? styles.inputTouch : styles.input} value={p.name} onChange={(e) => updatePort(idx, "name", e.target.value, setPortCalls)} /></td>
+                        <td style={styles.td}>
+                          <select style={isMobile ? styles.selectTouch : styles.select} value={p.type} onChange={(e) => updatePort(idx, "type", e.target.value as PortType, setPortCalls)}>
+                            <option value="start">start</option>
+                            <option value="load">load</option>
+                            <option value="discharge">discharge</option>
+                            <option value="bunker">bunker</option>
+                            <option value="canal">canal</option>
+                            <option value="other">other</option>
+                            <option value="end">end</option>
+                          </select>
+                        </td>
+                        <td style={styles.td}><input style={isMobile ? styles.inputTouch : styles.input} value={p.port_days} onChange={(e) => updatePort(idx, "port_days", e.target.value, setPortCalls)} /></td>
+                        <td style={styles.td}><input style={isMobile ? styles.inputTouch : styles.input} value={p.waiting_days} onChange={(e) => updatePort(idx, "waiting_days", e.target.value, setPortCalls)} /></td>
+                        <td style={styles.td}><input style={isMobile ? styles.inputTouch : styles.input} value={p.port_cons_mt_per_day} onChange={(e) => updatePort(idx, "port_cons_mt_per_day", e.target.value, setPortCalls)} /></td>
+                        <td style={styles.td}><input style={isMobile ? styles.inputTouch : styles.input} value={p.port_cost_usd} onChange={(e) => updatePort(idx, "port_cost_usd", e.target.value, setPortCalls)} /></td>
+                        <td style={styles.td}><input style={isMobile ? styles.inputTouch : styles.input} value={p.bunker_purchase_qty_mt} onChange={(e) => updatePort(idx, "bunker_purchase_qty_mt", e.target.value, setPortCalls)} /></td>
+                        <td style={styles.td}><input style={isMobile ? styles.inputTouch : styles.input} value={p.bunker_purchase_price_usd_per_mt} onChange={(e) => updatePort(idx, "bunker_purchase_price_usd_per_mt", e.target.value, setPortCalls)} /></td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+              </div>
+
+              <div style={styles.divider} />
+
+              <div ref={legsTableRef} style={styles.sectionTitle}>Legs</div>
+              <div style={styles.small}>On mobile, scroll this table left/right. Use Legs tab for reading.</div>
+              <div style={styles.hScroll}>
+                <table style={styles.table}>
+                  <thead>
+                    <tr>
+                      <th style={styles.th}>From</th>
+                      <th style={styles.th}>To</th>
+                      <th style={styles.th}>Distance (nm)</th>
+                      <th style={styles.th}>Speed (kn)</th>
+                      <th style={styles.th}>Sea cons</th>
+                      <th style={styles.th}>Save route</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {legs.map((l, idx) => (
+                      <tr key={idx}>
+                        <td style={styles.td}><input style={isMobile ? styles.inputTouch : styles.input} value={l.from} onChange={(e) => updateLeg(idx, "from", e.target.value, setLegs)} /></td>
+                        <td style={styles.td}><input style={isMobile ? styles.inputTouch : styles.input} value={l.to} onChange={(e) => updateLeg(idx, "to", e.target.value, setLegs)} /></td>
+                        <td style={styles.td}><input style={isMobile ? styles.inputTouch : styles.input} value={l.distance_nm} onChange={(e) => updateLeg(idx, "distance_nm", e.target.value, setLegs)} /></td>
+                        <td style={styles.td}><input style={isMobile ? styles.inputTouch : styles.input} value={l.speed_kn} onChange={(e) => updateLeg(idx, "speed_kn", e.target.value, setLegs)} /></td>
+                        <td style={styles.td}><input style={isMobile ? styles.inputTouch : styles.input} value={l.cons_mt_per_day} onChange={(e) => updateLeg(idx, "cons_mt_per_day", e.target.value, setLegs)} /></td>
+                        <td style={styles.td}><button style={styles.miniBtn} onClick={() => saveLeg(idx)}>Save</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div style={styles.divider} />
+
+              <div style={styles.sectionTitle}>Revenue & Costs</div>
+              <div style={styles.twoCol}>
+                <Field label="Cargo qty (mt)">
+                  <input style={isMobile ? styles.inputTouch : styles.input} value={revenue.cargo_qty_mt} onChange={(e) => setRevenue((p) => ({ ...p, cargo_qty_mt: e.target.value }))} />
+                </Field>
+                <Field label="Commission (%)">
+                  <input style={isMobile ? styles.inputTouch : styles.input} value={revenue.commission_pct} onChange={(e) => setRevenue((p) => ({ ...p, commission_pct: e.target.value }))} />
+                </Field>
+              </div>
+
+              <div style={styles.twoCol}>
+                <Field label="Freight type">
+                  <select style={isMobile ? styles.selectTouch : styles.select} value={revenue.freight_type} onChange={(e) => setRevenue((p) => ({ ...p, freight_type: e.target.value as FreightType }))}>
+                    <option value="per_mt">$/mt</option>
+                    <option value="lumpsum">Lumpsum</option>
+                  </select>
+                </Field>
+                <Field label="Target TCE (USD/day) — solver">
+                  <input style={isMobile ? styles.inputTouch : styles.input} value={targetTce} onChange={(e) => setTargetTce(e.target.value)} />
+                </Field>
+              </div>
+
+              {revenue.freight_type === "per_mt" ? (
+                <Field label="Freight (USD/mt)">
+                  <input style={isMobile ? styles.inputTouch : styles.input} value={revenue.freight_usd_per_mt} onChange={(e) => setRevenue((p) => ({ ...p, freight_usd_per_mt: e.target.value }))} />
+                </Field>
+              ) : (
+                <Field label="Freight lumpsum (USD)">
+                  <input style={isMobile ? styles.inputTouch : styles.input} value={revenue.freight_lumpsum_usd} onChange={(e) => setRevenue((p) => ({ ...p, freight_lumpsum_usd: e.target.value }))} />
+                </Field>
               )}
+
+              <div style={styles.twoCol}>
+                <Field label="Bunker blended price (USD/mt)">
+                  <input style={isMobile ? styles.inputTouch : styles.input} value={costs.bunker_price_usd_per_mt} onChange={(e) => setCosts((p) => ({ ...p, bunker_price_usd_per_mt: e.target.value }))} />
+                </Field>
+                <Field label="Canal/tolls (USD)">
+                  <input style={isMobile ? styles.inputTouch : styles.input} value={costs.canal_tolls_usd} onChange={(e) => setCosts((p) => ({ ...p, canal_tolls_usd: e.target.value }))} />
+                </Field>
+              </div>
+
+              <Field label="Other costs (USD)">
+                <input style={isMobile ? styles.inputTouch : styles.input} value={costs.other_costs_usd} onChange={(e) => setCosts((p) => ({ ...p, other_costs_usd: e.target.value }))} />
+              </Field>
             </>
           )}
         </section>
+
+        {/* Desktop right column Results */}
+        {!isMobile && (
+          <section style={styles.card}>
+            <h2 style={{ margin: 0 }}>Results</h2>
+            <div style={styles.divider} />
+
+            {result?.error ? (
+              <div style={styles.warn}><b>Fix needed:</b> {result.error}</div>
+            ) : result?.status === "missing_distance" ? (
+              <div style={styles.warn}><b>{result.message}</b></div>
+            ) : (
+              <>
+                <div style={styles.sectionTitle}>Time</div>
+                <KV label="Sea days" value={round(result.sea_days_total, 2)} />
+                <KV label="Port days" value={round(result.port_days_total, 2)} />
+                <KV label="Waiting days" value={round(result.waiting_days_total, 2)} />
+                <KV label="Voyage days" value={round(result.voyage_days, 2)} />
+
+                <div style={styles.divider} />
+
+                <div style={styles.sectionTitle}>Bunkers</div>
+                <KV label="Total required (mt)" value={round(result.bunkers_total, 1)} />
+                <KV label="Purchased (mt)" value={round(result.bunkers_purchased_total, 1)} />
+                <KV label="Bunker cost (USD)" value={round(result.bunker_cost, 0)} />
+
+                {solver && (
+                  <>
+                    <div style={styles.divider} />
+                    <div style={styles.sectionTitle}>Freight solver ($/mt)</div>
+                    <KV label="Required freight (USD/mt)" value={round(solver.required_per_mt, 2)} />
+                  </>
+                )}
+
+                <div style={styles.divider} />
+
+                <div style={styles.sectionTitle}>Sensitivity (TCE impact)</div>
+                {!sensitivity ? (
+                  <div style={styles.small}>Fill distances first to see sensitivity.</div>
+                ) : (
+                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                    <thead>
+                      <tr>
+                        <th style={{ textAlign: "left", fontSize: 12, color: "#64748b", padding: "6px 0" }}>Scenario</th>
+                        <th style={{ textAlign: "right", fontSize: 12, color: "#64748b", padding: "6px 0" }}>TCE</th>
+                        <th style={{ textAlign: "right", fontSize: 12, color: "#64748b", padding: "6px 0" }}>Δ vs base</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sensitivity.rows.map((r: any, i: number) => (
+                        <tr key={i}>
+                          <td style={{ padding: "6px 0", fontSize: 13, color: "#0f172a" }}>{r.label}</td>
+                          <td style={{ padding: "6px 0", textAlign: "right", fontWeight: 800 }}>{r.tce != null ? round(r.tce, 0) : "-"}</td>
+                          <td style={{ padding: "6px 0", textAlign: "right", fontWeight: 800 }}>{r.delta != null ? round(r.delta, 0) : "-"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </>
+            )}
+          </section>
+        )}
       </div>
     </main>
   );
