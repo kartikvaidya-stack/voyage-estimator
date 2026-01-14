@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { calcItinerary, round, solveFreightPerMtForTargetTCE } from "../lib/itineraryCalc";
 import { lookupDistanceNm, saveDistanceNm, clearUserRoutes } from "../lib/routeTable";
+import { getProfile, type VesselClass } from "../lib/vesselProfiles";
 
 type PortType = "start" | "load" | "discharge" | "bunker" | "canal" | "other" | "end";
 type FreightType = "per_mt" | "lumpsum";
@@ -61,10 +62,22 @@ function num(v: any): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function isBlank(v: any): boolean {
+  return v === null || v === undefined || String(v).trim() === "";
+}
+
 const LS_VOYAGES_KEY = "VE_SAVED_VOYAGES_V1";
 
 const styles: Record<string, React.CSSProperties> = {
-  page: { padding: 28, fontFamily: "Arial, sans-serif", maxWidth: 1250, margin: "0 auto", background: "#f7f9fc", minHeight: "100vh", color: "#0f172a" },
+  page: {
+    padding: 28,
+    fontFamily: "Arial, sans-serif",
+    maxWidth: 1250,
+    margin: "0 auto",
+    background: "#f7f9fc",
+    minHeight: "100vh",
+    color: "#0f172a",
+  },
   header: { display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 14 },
   title: { margin: 0, fontSize: 26, color: "#14213d" },
   subtitle: { margin: "6px 0 0", color: "#4b5563", lineHeight: 1.35 },
@@ -77,7 +90,7 @@ const styles: Record<string, React.CSSProperties> = {
   btn: { padding: "10px 12px", borderRadius: 12, border: "1px solid #d7e3ff", background: "#eef4ff", cursor: "pointer", fontWeight: 800, color: "#1e3a8a" },
   btnDark: { padding: "10px 12px", borderRadius: 12, border: "1px solid #111827", background: "#111827", cursor: "pointer", fontWeight: 900, color: "#ffffff" },
   btnDanger: { padding: "10px 12px", borderRadius: 12, border: "1px solid #fecaca", background: "#fff1f2", cursor: "pointer", fontWeight: 800, color: "#9f1239" },
-  table: { width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" },
+  table: { width: "100%", borderCollapse: "separate", borderSpacing: "0 8px", minWidth: 980 },
   th: { textAlign: "left", fontSize: 12, color: "#64748b", padding: "0 8px" },
   td: { padding: "0 8px", verticalAlign: "top" },
   input: { width: "100%", padding: 10, borderRadius: 10, border: "1px solid #d9e0ee", outline: "none", background: "#fbfdff" },
@@ -141,8 +154,17 @@ function cloneVoyage(v: VoyageUI): VoyageUI {
 }
 
 export default function Page() {
+  // Mobile layout switch (no refactor)
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 900);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+
   const [aiText, setAiText] = useState<string>(
-    "Umax open Singapore. Load Palembang coal about 55,000 mt. Discharge Vizag and Kandla. Want idea for 16,000 USD/day TCE. Bunkers Singapore."
+    "Umax open Singapore. Load Palembang coal about 55,000 mt at 8k shinc. Discharge Vizag and Kandla at 10k pwwd. Target 16,000 USD/day TCE. Bunkers Singapore."
   );
   const [aiError, setAiError] = useState<string>("");
   const [aiRaw, setAiRaw] = useState<string>("");
@@ -170,9 +192,10 @@ export default function Page() {
   const [exportJson, setExportJson] = useState<string>("");
   const [importJson, setImportJson] = useState<string>("");
 
-  useEffect(() => {
-    setSavedList(getSavedVoyages());
-  }, []);
+  const [lastVesselClass, setLastVesselClass] = useState<VesselClass>("unknown");
+  const [lastDerived, setLastDerived] = useState<any>(null);
+
+  useEffect(() => setSavedList(getSavedVoyages()), []);
 
   useEffect(() => {
     if (!preferSavedDistances) return;
@@ -265,6 +288,30 @@ export default function Page() {
       ],
     };
   }, [result, voyage]);
+
+  function newVoyage() {
+    const d = defaultVoyage();
+    setTradeMode(d.tradeMode);
+    setVoyageMode(d.voyageMode);
+    setRoundReturnPort(d.roundReturnPort);
+    setPreferSavedDistances(d.preferSavedDistances);
+    setPortCalls(d.portCalls);
+    setLegs(d.legs);
+    setRevenue(d.revenue);
+    setCosts(d.costs);
+    setTargetTce(d.targetTce);
+
+    setAiDraft(null);
+    setAiError("");
+    setAiRaw("");
+    setMsg("New voyage loaded (defaults).");
+    setSummaryText("");
+    setExportJson("");
+    setImportJson("");
+
+    setLastVesselClass("unknown");
+    setLastDerived(null);
+  }
 
   function fillDistances() {
     const missing: string[] = [];
@@ -412,29 +459,101 @@ export default function Page() {
     }
   }
 
+  function applyVesselProfileToTables(vesselClass: VesselClass) {
+    const profile = getProfile(vesselClass);
+    // If unknown, do nothing
+    if (!profile || vesselClass === "unknown") return { applied: false, profileLabel: "" };
+
+    // Apply defaults: speed/cons to legs ONLY if blank/zero
+    setLegs((prev) =>
+      prev.map((l) => {
+        const sp = num(l.speed_kn) || 0;
+        const cs = num(l.cons_mt_per_day) || 0;
+        return {
+          ...l,
+          speed_kn: sp > 0 ? l.speed_kn : String(profile.ladenSpeedKn),
+          cons_mt_per_day: cs > 0 ? l.cons_mt_per_day : String(profile.ladenConsMtPerDay),
+        };
+      })
+    );
+
+    // Apply port cons ONLY if blank/zero
+    setPortCalls((prev) =>
+      prev.map((p) => {
+        const pc = num(p.port_cons_mt_per_day) || 0;
+        return { ...p, port_cons_mt_per_day: pc > 0 ? p.port_cons_mt_per_day : String(profile.portConsMtPerDay) };
+      })
+    );
+
+    return { applied: true, profileLabel: profile.label };
+  }
+
+  function applyRatesToPortDays(derived: any, pc: PortCallUI[]) {
+    const cargo = derived?.cargo_qty_mt != null ? Number(derived.cargo_qty_mt) : num(revenue.cargo_qty_mt);
+    const loadRate = derived?.load_rate_mt_per_day != null ? Number(derived.load_rate_mt_per_day) : null;
+    const disRate = derived?.discharge_rate_mt_per_day != null ? Number(derived.discharge_rate_mt_per_day) : null;
+
+    if (!cargo || cargo <= 0) return { pc, changed: 0, notes: [] as string[] };
+
+    let changed = 0;
+    const notes: string[] = [];
+
+    const next = pc.map((p) => {
+      const curDays = num(p.port_days);
+      // Only auto-fill if port_days is blank/0 for load/disch OR clearly missing
+      const needsFill = curDays == null || curDays === 0 || isBlank(p.port_days);
+
+      if (p.type === "load" && loadRate && loadRate > 0 && needsFill) {
+        const days = cargo / loadRate;
+        changed += 1;
+        notes.push(`Load days = ${cargo} / ${loadRate} ≈ ${round(days, 2)}`);
+        return { ...p, port_days: String(round(days, 2)) };
+      }
+
+      if (p.type === "discharge" && disRate && disRate > 0 && needsFill) {
+        const days = cargo / disRate;
+        changed += 1;
+        notes.push(`Disch days = ${cargo} / ${disRate} ≈ ${round(days, 2)}`);
+        return { ...p, port_days: String(round(days, 2)) };
+      }
+
+      return p;
+    });
+
+    return { pc: next, changed, notes };
+  }
+
   function applyAIDraft() {
     if (!aiDraft) return;
+
+    const vesselClass = (aiDraft?.vesselClass || "unknown") as VesselClass;
+    const derived = aiDraft?.derived || null;
+    setLastVesselClass(vesselClass);
+    setLastDerived(derived);
+
+    let pcApplied: PortCallUI[] = portCalls;
 
     if (Array.isArray(aiDraft.portCalls) && aiDraft.portCalls.length >= 2) {
       const pc: PortCallUI[] = aiDraft.portCalls.map((p: any) => ({
         name: p.name ?? "",
         type: (p.type ?? "other") as PortType,
-        port_days: String(p.port_days ?? ""),
-        waiting_days: String(p.waiting_days ?? ""),
-        port_cons_mt_per_day: String(p.port_cons_mt_per_day ?? (tradeMode === "tanker" ? "6" : "4")),
-        port_cost_usd: String(p.port_cost_usd ?? ""),
-        bunker_purchase_qty_mt: String(p.bunker_purchase_qty_mt ?? ""),
-        bunker_purchase_price_usd_per_mt: String(p.bunker_purchase_price_usd_per_mt ?? ""),
+        port_days: p.port_days == null ? "" : String(p.port_days),
+        waiting_days: p.waiting_days == null ? "" : String(p.waiting_days),
+        port_cons_mt_per_day: p.port_cons_mt_per_day == null ? "" : String(p.port_cons_mt_per_day),
+        port_cost_usd: p.port_cost_usd == null ? "" : String(p.port_cost_usd),
+        bunker_purchase_qty_mt: p.bunker_purchase_qty_mt == null ? "" : String(p.bunker_purchase_qty_mt),
+        bunker_purchase_price_usd_per_mt: p.bunker_purchase_price_usd_per_mt == null ? "" : String(p.bunker_purchase_price_usd_per_mt),
       }));
       setPortCalls(pc);
+      pcApplied = pc;
 
       if (Array.isArray(aiDraft.legs) && aiDraft.legs.length >= 1) {
         const lg: LegUI[] = aiDraft.legs.map((l: any) => ({
           from: l.from ?? "",
           to: l.to ?? "",
-          distance_nm: String(l.distance_nm ?? ""),
-          speed_kn: String(l.speed_kn ?? (tradeMode === "tanker" ? "13.5" : "12.5")),
-          cons_mt_per_day: String(l.cons_mt_per_day ?? (tradeMode === "tanker" ? "32" : "28")),
+          distance_nm: "", // always blank by design
+          speed_kn: l.speed_kn == null ? "" : String(l.speed_kn),
+          cons_mt_per_day: l.cons_mt_per_day == null ? "" : String(l.cons_mt_per_day),
         }));
         setLegs(lg);
       } else {
@@ -445,12 +564,14 @@ export default function Page() {
     if (aiDraft.revenue) {
       setRevenue((prev) => ({
         ...prev,
-        cargo_qty_mt: String(aiDraft.revenue.cargo_qty_mt ?? prev.cargo_qty_mt),
+        cargo_qty_mt: String(aiDraft.revenue.cargo_qty_mt ?? derived?.cargo_qty_mt ?? prev.cargo_qty_mt),
         freight_type: (aiDraft.revenue.freight_type ?? prev.freight_type) as FreightType,
         freight_usd_per_mt: String(aiDraft.revenue.freight_usd_per_mt ?? prev.freight_usd_per_mt),
         freight_lumpsum_usd: String(aiDraft.revenue.freight_lumpsum_usd ?? prev.freight_lumpsum_usd),
         commission_pct: String(aiDraft.revenue.commission_pct ?? prev.commission_pct),
       }));
+    } else if (derived?.cargo_qty_mt != null) {
+      setRevenue((prev) => ({ ...prev, cargo_qty_mt: String(derived.cargo_qty_mt) }));
     }
 
     if (aiDraft.costs) {
@@ -462,7 +583,22 @@ export default function Page() {
       }));
     }
 
-    setMsg("Applied AI draft. Now click Fill Distances. Then Save Routes if needed.");
+    // Apply vessel defaults (fill blanks only)
+    const prof = applyVesselProfileToTables(vesselClass);
+
+    // Apply port-days from text rates (fill blanks/0 only)
+    const r = applyRatesToPortDays(derived, pcApplied);
+    if (r.changed > 0) setPortCalls(r.pc);
+
+    const notes = [];
+    if (prof.applied) notes.push(`Vessel defaults: ${prof.profileLabel}`);
+    if (r.changed > 0) notes.push(`Auto port days: ${r.changed} field(s)\n- ${r.notes.join("\n- ")}`);
+
+    setMsg(
+      notes.length
+        ? `Applied AI draft.\n${notes.join("\n")}\n\nNext: click Fill Distances.`
+        : "Applied AI draft. Next: click Fill Distances."
+    );
   }
 
   function makeVoyageSnapshot(name?: string): VoyageUI {
@@ -545,6 +681,8 @@ export default function Page() {
     const avgCons = legs.length ? round(legs.map((l) => Number(l.cons_mt_per_day || 0)).reduce((a, b) => a + b, 0) / legs.length, 2) : "-";
     const fr = revenue.freight_type === "per_mt" ? `${revenue.freight_usd_per_mt} USD/mt` : `${revenue.freight_lumpsum_usd} USD lumpsum`;
 
+    const vesselNote = lastVesselClass !== "unknown" ? `Vessel profile: ${getProfile(lastVesselClass).label}` : "Vessel profile: (none)";
+
     const txt =
 `VOYAGE ESTIMATE (Owner TCE)
 
@@ -574,6 +712,7 @@ Money:
 OWNER TCE: ${round(result.tce_usd_per_day, 0)} USD/day
 
 Key assumptions:
+- ${vesselNote}
 - Avg speed: ${avgSpeed} kn
 - Avg sea cons: ${avgCons} mt/day
 - Blended bunker price (fallback): ${costs.bunker_price_usd_per_mt} USD/mt
@@ -586,16 +725,26 @@ Key assumptions:
     <main style={styles.page}>
       <div style={styles.header}>
         <div>
-          <h1 style={styles.title}>Voyage Estimator — Full + Summary</h1>
-          <p style={styles.subtitle}>Owner TCE for Dry + Tanker. Save routes, save voyages, export JSON, generate a summary.</p>
+          <h1 style={styles.title}>Voyage Estimator — Upgraded (v1.1)</h1>
+          <p style={styles.subtitle}>Now includes New Voyage, mobile layout, vessel profiles, and port-days-from-text.</p>
         </div>
-        <div style={styles.badge}>v1</div>
+        <div style={styles.badge}>v1.1</div>
       </div>
 
-      <div style={styles.grid}>
+      <div
+        style={{
+          ...styles.grid,
+          gridTemplateColumns: isMobile ? "1fr" : "1.45fr 1fr",
+        }}
+      >
         <section style={styles.card}>
           <h2 style={{ margin: 0 }}>Setup</h2>
-          <div style={styles.small}>Choose mode, then AI draft or manual edit. Round voyage adds return port.</div>
+          <div style={styles.small}>Choose mode, then AI draft or manual edit. “New Voyage” resets current case only.</div>
+
+          <div style={styles.btnRow}>
+            <button style={styles.btnDanger} onClick={newVoyage}>New Voyage</button>
+            <button style={styles.btn} onClick={generateSummary}>Generate Summary</button>
+          </div>
 
           <div style={styles.twoCol}>
             <Field label="Trade mode">
@@ -629,7 +778,6 @@ Key assumptions:
             <button style={styles.btn} onClick={fillDistances}>Fill Distances</button>
             <button style={styles.btn} onClick={saveAllLegs}>Save All Routes</button>
             <button style={styles.btnDanger} onClick={clearSavedRoutesUI}>Clear Saved Routes</button>
-            <button style={styles.btn} onClick={generateSummary}>Generate Summary</button>
           </div>
 
           {msg && <div style={{ ...styles.info, marginTop: 10 }}><b>{msg}</b></div>}
@@ -645,7 +793,11 @@ Key assumptions:
           <div style={styles.divider} />
 
           <h2 style={{ margin: 0 }}>AI Draft</h2>
-          <div style={styles.small}>Paste fixture instructions; AI drafts ports/legs (distances blank).</div>
+          <div style={styles.small}>
+            Paste voyage description. AI drafts ports/legs. Distances remain blank by design.
+            <br />
+            <b>New:</b> vessel type (e.g., Ultramax) can auto-fill speed/cons, and “8k shinc / 10k pwwd” can auto-fill port days.
+          </div>
 
           <textarea style={{ ...styles.textarea, marginTop: 10 }} value={aiText} onChange={(e) => setAiText(e.target.value)} />
 
@@ -708,72 +860,76 @@ Key assumptions:
           <div style={styles.divider} />
 
           <div style={styles.sectionTitle}>Port calls</div>
-          <table style={styles.table}>
-            <thead>
-              <tr>
-                <th style={styles.th}>Port</th>
-                <th style={styles.th}>Type</th>
-                <th style={styles.th}>Port days</th>
-                <th style={styles.th}>Waiting</th>
-                <th style={styles.th}>Port cons</th>
-                <th style={styles.th}>Port cost</th>
-                <th style={styles.th}>Bunker buy</th>
-                <th style={styles.th}>Bunker price</th>
-              </tr>
-            </thead>
-            <tbody>
-              {portCalls.map((p, idx) => (
-                <tr key={idx}>
-                  <td style={styles.td}><input style={styles.input} value={p.name} onChange={(e) => updatePort(idx, "name", e.target.value, setPortCalls)} /></td>
-                  <td style={styles.td}>
-                    <select style={styles.select} value={p.type} onChange={(e) => updatePort(idx, "type", e.target.value as PortType, setPortCalls)}>
-                      <option value="start">start</option>
-                      <option value="load">load</option>
-                      <option value="discharge">discharge</option>
-                      <option value="bunker">bunker</option>
-                      <option value="canal">canal</option>
-                      <option value="other">other</option>
-                      <option value="end">end</option>
-                    </select>
-                  </td>
-                  <td style={styles.td}><input style={styles.input} value={p.port_days} onChange={(e) => updatePort(idx, "port_days", e.target.value, setPortCalls)} /></td>
-                  <td style={styles.td}><input style={styles.input} value={p.waiting_days} onChange={(e) => updatePort(idx, "waiting_days", e.target.value, setPortCalls)} /></td>
-                  <td style={styles.td}><input style={styles.input} value={p.port_cons_mt_per_day} onChange={(e) => updatePort(idx, "port_cons_mt_per_day", e.target.value, setPortCalls)} /></td>
-                  <td style={styles.td}><input style={styles.input} value={p.port_cost_usd} onChange={(e) => updatePort(idx, "port_cost_usd", e.target.value, setPortCalls)} /></td>
-                  <td style={styles.td}><input style={styles.input} value={p.bunker_purchase_qty_mt} onChange={(e) => updatePort(idx, "bunker_purchase_qty_mt", e.target.value, setPortCalls)} /></td>
-                  <td style={styles.td}><input style={styles.input} value={p.bunker_purchase_price_usd_per_mt} onChange={(e) => updatePort(idx, "bunker_purchase_price_usd_per_mt", e.target.value, setPortCalls)} /></td>
+          <div style={{ overflowX: "auto" }}>
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <th style={styles.th}>Port</th>
+                  <th style={styles.th}>Type</th>
+                  <th style={styles.th}>Port days</th>
+                  <th style={styles.th}>Waiting</th>
+                  <th style={styles.th}>Port cons</th>
+                  <th style={styles.th}>Port cost</th>
+                  <th style={styles.th}>Bunker buy</th>
+                  <th style={styles.th}>Bunker price</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {portCalls.map((p, idx) => (
+                  <tr key={idx}>
+                    <td style={styles.td}><input style={styles.input} value={p.name} onChange={(e) => updatePort(idx, "name", e.target.value, setPortCalls)} /></td>
+                    <td style={styles.td}>
+                      <select style={styles.select} value={p.type} onChange={(e) => updatePort(idx, "type", e.target.value as PortType, setPortCalls)}>
+                        <option value="start">start</option>
+                        <option value="load">load</option>
+                        <option value="discharge">discharge</option>
+                        <option value="bunker">bunker</option>
+                        <option value="canal">canal</option>
+                        <option value="other">other</option>
+                        <option value="end">end</option>
+                      </select>
+                    </td>
+                    <td style={styles.td}><input style={styles.input} value={p.port_days} onChange={(e) => updatePort(idx, "port_days", e.target.value, setPortCalls)} /></td>
+                    <td style={styles.td}><input style={styles.input} value={p.waiting_days} onChange={(e) => updatePort(idx, "waiting_days", e.target.value, setPortCalls)} /></td>
+                    <td style={styles.td}><input style={styles.input} value={p.port_cons_mt_per_day} onChange={(e) => updatePort(idx, "port_cons_mt_per_day", e.target.value, setPortCalls)} /></td>
+                    <td style={styles.td}><input style={styles.input} value={p.port_cost_usd} onChange={(e) => updatePort(idx, "port_cost_usd", e.target.value, setPortCalls)} /></td>
+                    <td style={styles.td}><input style={styles.input} value={p.bunker_purchase_qty_mt} onChange={(e) => updatePort(idx, "bunker_purchase_qty_mt", e.target.value, setPortCalls)} /></td>
+                    <td style={styles.td}><input style={styles.input} value={p.bunker_purchase_price_usd_per_mt} onChange={(e) => updatePort(idx, "bunker_purchase_price_usd_per_mt", e.target.value, setPortCalls)} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
           <div style={styles.divider} />
 
           <div style={styles.sectionTitle}>Legs</div>
-          <table style={styles.table}>
-            <thead>
-              <tr>
-                <th style={styles.th}>From</th>
-                <th style={styles.th}>To</th>
-                <th style={styles.th}>Distance (nm)</th>
-                <th style={styles.th}>Speed (kn)</th>
-                <th style={styles.th}>Sea cons</th>
-                <th style={styles.th}>Save route</th>
-              </tr>
-            </thead>
-            <tbody>
-              {legs.map((l, idx) => (
-                <tr key={idx}>
-                  <td style={styles.td}><input style={styles.input} value={l.from} onChange={(e) => updateLeg(idx, "from", e.target.value, setLegs)} /></td>
-                  <td style={styles.td}><input style={styles.input} value={l.to} onChange={(e) => updateLeg(idx, "to", e.target.value, setLegs)} /></td>
-                  <td style={styles.td}><input style={styles.input} value={l.distance_nm} onChange={(e) => updateLeg(idx, "distance_nm", e.target.value, setLegs)} /></td>
-                  <td style={styles.td}><input style={styles.input} value={l.speed_kn} onChange={(e) => updateLeg(idx, "speed_kn", e.target.value, setLegs)} /></td>
-                  <td style={styles.td}><input style={styles.input} value={l.cons_mt_per_day} onChange={(e) => updateLeg(idx, "cons_mt_per_day", e.target.value, setLegs)} /></td>
-                  <td style={styles.td}><button style={styles.miniBtn} onClick={() => saveLeg(idx)}>Save</button></td>
+          <div style={{ overflowX: "auto" }}>
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <th style={styles.th}>From</th>
+                  <th style={styles.th}>To</th>
+                  <th style={styles.th}>Distance (nm)</th>
+                  <th style={styles.th}>Speed (kn)</th>
+                  <th style={styles.th}>Sea cons</th>
+                  <th style={styles.th}>Save route</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {legs.map((l, idx) => (
+                  <tr key={idx}>
+                    <td style={styles.td}><input style={styles.input} value={l.from} onChange={(e) => updateLeg(idx, "from", e.target.value, setLegs)} /></td>
+                    <td style={styles.td}><input style={styles.input} value={l.to} onChange={(e) => updateLeg(idx, "to", e.target.value, setLegs)} /></td>
+                    <td style={styles.td}><input style={styles.input} value={l.distance_nm} onChange={(e) => updateLeg(idx, "distance_nm", e.target.value, setLegs)} /></td>
+                    <td style={styles.td}><input style={styles.input} value={l.speed_kn} onChange={(e) => updateLeg(idx, "speed_kn", e.target.value, setLegs)} /></td>
+                    <td style={styles.td}><input style={styles.input} value={l.cons_mt_per_day} onChange={(e) => updateLeg(idx, "cons_mt_per_day", e.target.value, setLegs)} /></td>
+                    <td style={styles.td}><button style={styles.miniBtn} onClick={() => saveLeg(idx)}>Save</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
           <div style={styles.divider} />
 
