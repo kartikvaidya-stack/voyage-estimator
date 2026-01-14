@@ -9,7 +9,6 @@ type PortType = "start" | "load" | "discharge" | "bunker" | "canal" | "other" | 
 type FreightType = "per_mt" | "lumpsum";
 type TradeMode = "dry" | "tanker";
 type VoyageMode = "oneway" | "round";
-
 type MobileTab = "summary" | "ports" | "legs" | "edit";
 
 type PortCallUI = {
@@ -63,7 +62,6 @@ function num(v: any): number | null {
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 }
-
 function isBlank(v: any): boolean {
   return v === null || v === undefined || String(v).trim() === "";
 }
@@ -74,18 +72,20 @@ const styles: Record<string, React.CSSProperties> = {
   page: {
     padding: 22,
     fontFamily: "Arial, sans-serif",
-    maxWidth: 1250,
+    maxWidth: 1400,
     margin: "0 auto",
     background: "#f7f9fc",
     minHeight: "100vh",
     color: "#0f172a",
+    // Critical: prevents iOS “evening / dark mode” making input text invisible
+    colorScheme: "light",
   },
   header: { display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 12 },
   title: { margin: 0, fontSize: 26, color: "#14213d" },
   subtitle: { margin: "6px 0 0", color: "#4b5563", lineHeight: 1.35 },
   badge: { padding: "8px 10px", borderRadius: 12, background: "#eef4ff", border: "1px solid #d7e3ff", color: "#1e3a8a", fontWeight: 800, fontSize: 12, whiteSpace: "nowrap" },
 
-  grid: { display: "grid", gridTemplateColumns: "1.1fr 1fr", gap: 16 },
+  grid: { display: "grid", gridTemplateColumns: "1fr 1.35fr", gap: 16 },
 
   card: { background: "#ffffff", border: "1px solid #e6eaf2", padding: 16, borderRadius: 14, boxShadow: "0 6px 18px rgba(20, 30, 60, 0.06)" },
   sectionTitle: { margin: "14px 0 8px", fontSize: 15, color: "#0f172a" },
@@ -96,15 +96,16 @@ const styles: Record<string, React.CSSProperties> = {
   btnDark: { padding: "10px 12px", borderRadius: 12, border: "1px solid #111827", background: "#111827", cursor: "pointer", fontWeight: 900, color: "#ffffff" },
   btnDanger: { padding: "10px 12px", borderRadius: 12, border: "1px solid #fecaca", background: "#fff1f2", cursor: "pointer", fontWeight: 800, color: "#9f1239" },
 
-  table: { width: "100%", borderCollapse: "separate", borderSpacing: "0 8px", minWidth: 980 },
+  // IMPORTANT: reduced minWidth so left tables don’t force the right column too narrow
+  table: { width: "100%", borderCollapse: "separate", borderSpacing: "0 8px", minWidth: 760 },
   th: { textAlign: "left", fontSize: 12, color: "#64748b", padding: "0 8px" },
   td: { padding: "0 8px", verticalAlign: "top" },
 
-  input: { width: "100%", padding: 10, borderRadius: 10, border: "1px solid #d9e0ee", outline: "none", background: "#fbfdff" },
-  inputTouch: { width: "100%", padding: 14, borderRadius: 12, border: "1px solid #d9e0ee", outline: "none", background: "#fbfdff", fontSize: 16 },
-  select: { width: "100%", padding: 10, borderRadius: 10, border: "1px solid #d9e0ee", background: "#fbfdff" },
-  selectTouch: { width: "100%", padding: 14, borderRadius: 12, border: "1px solid #d9e0ee", background: "#fbfdff", fontSize: 16 },
-  textarea: { width: "100%", padding: 12, borderRadius: 12, border: "1px solid #d9e0ee", outline: "none", background: "#fbfdff", minHeight: 110, resize: "vertical", fontFamily: "inherit", lineHeight: 1.35 },
+  input: { width: "100%", padding: 10, borderRadius: 10, border: "1px solid #d9e0ee", outline: "none", background: "#fbfdff", color: "#0f172a" },
+  inputTouch: { width: "100%", padding: 14, borderRadius: 12, border: "1px solid #d9e0ee", outline: "none", background: "#fbfdff", color: "#0f172a", fontSize: 16 },
+  select: { width: "100%", padding: 10, borderRadius: 10, border: "1px solid #d9e0ee", background: "#fbfdff", color: "#0f172a" },
+  selectTouch: { width: "100%", padding: 14, borderRadius: 12, border: "1px solid #d9e0ee", background: "#fbfdff", color: "#0f172a", fontSize: 16 },
+  textarea: { width: "100%", padding: 12, borderRadius: 12, border: "1px solid #d9e0ee", outline: "none", background: "#fbfdff", color: "#0f172a", minHeight: 110, resize: "vertical", fontFamily: "inherit", lineHeight: 1.35 },
 
   warn: { padding: 12, background: "#fff7ed", borderRadius: 12, border: "1px solid #fed7aa", color: "#9a3412", whiteSpace: "pre-wrap" },
   info: { padding: 12, background: "#ecfeff", borderRadius: 12, border: "1px solid #a5f3fc", color: "#0e7490", whiteSpace: "pre-wrap" },
@@ -192,7 +193,7 @@ export default function Page() {
   const [mobileTab, setMobileTab] = useState<MobileTab>("summary");
 
   const [aiText, setAiText] = useState<string>(
-    "Umax open Singapore. Load Palembang coal about 55,000 mt at 8k shinc. Discharge Vizag and Kandla at 10k pwwd. Target 16,000 USD/day TCE. Bunkers Singapore before sailing."
+    "Ultramax open Singapore. Load Palembang coal about 55,000 mt at 8k shinc. Discharge Vizag and Kandla at 10k pwwd. Target 16,000 USD/day TCE. Bunker at Singapore before sailing."
   );
   const [aiError, setAiError] = useState<string>("");
   const [aiRaw, setAiRaw] = useState<string>("");
@@ -704,8 +705,9 @@ export default function Page() {
   }
 
   function generateSummary() {
+    // If distances missing, still give a clear message (so button never feels “dead”)
     if (!result || result.status !== "ok") {
-      setMsg("Fill distances first so Results are OK, then generate summary.");
+      setMsg("Summary needs valid Results. Please Fill Distances first (or manually enter distances).");
       return;
     }
 
@@ -713,7 +715,6 @@ export default function Page() {
     const avgSpeed = legs.length ? round(legs.map((l) => Number(l.speed_kn || 0)).reduce((a, b) => a + b, 0) / legs.length, 2) : "-";
     const avgCons = legs.length ? round(legs.map((l) => Number(l.cons_mt_per_day || 0)).reduce((a, b) => a + b, 0) / legs.length, 2) : "-";
     const fr = revenue.freight_type === "per_mt" ? `${revenue.freight_usd_per_mt} USD/mt` : `${revenue.freight_lumpsum_usd} USD lumpsum`;
-
     const vesselNote = lastVesselClass !== "unknown" ? `Vessel profile: ${getProfile(lastVesselClass).label}` : "Vessel profile: (none)";
 
     const txt =
@@ -755,7 +756,6 @@ Key assumptions:
     if (isMobile) setMobileTab("summary");
   }
 
-  // --- v1.2: Desktop-first TCE banner (full width) ---
   const showTceBanner = !isMobile && result?.status === "ok" && !result?.error;
 
   function scrollToPortsTable() {
@@ -767,10 +767,10 @@ Key assumptions:
 
   const MobileTabs = () => (
     <div style={styles.tabsRow}>
-      <button style={mobileTab === "summary" ? styles.tabActive : styles.tab} onClick={() => setMobileTab("summary")}>Summary</button>
-      <button style={mobileTab === "ports" ? styles.tabActive : styles.tab} onClick={() => setMobileTab("ports")}>Ports</button>
-      <button style={mobileTab === "legs" ? styles.tabActive : styles.tab} onClick={() => setMobileTab("legs")}>Legs</button>
-      <button style={mobileTab === "edit" ? styles.tabActive : styles.tab} onClick={() => setMobileTab("edit")}>Full Edit</button>
+      <button type="button" style={mobileTab === "summary" ? styles.tabActive : styles.tab} onClick={() => setMobileTab("summary")}>Summary</button>
+      <button type="button" style={mobileTab === "ports" ? styles.tabActive : styles.tab} onClick={() => setMobileTab("ports")}>Ports</button>
+      <button type="button" style={mobileTab === "legs" ? styles.tabActive : styles.tab} onClick={() => setMobileTab("legs")}>Legs</button>
+      <button type="button" style={mobileTab === "edit" ? styles.tabActive : styles.tab} onClick={() => setMobileTab("edit")}>Full Edit</button>
     </div>
   );
 
@@ -778,7 +778,7 @@ Key assumptions:
     <main style={styles.page}>
       <div style={styles.header}>
         <div>
-          <h1 style={styles.title}>Voyage Estimator — v1.2 (UI & Mobile)</h1>
+          <h1 style={styles.title}>Voyage Estimator — v1.2</h1>
           <p style={styles.subtitle}>Owner TCE first on desktop. Mobile has Summary/Ports/Legs/Edit tabs.</p>
         </div>
         <div style={styles.badge}>v1.2</div>
@@ -791,7 +791,7 @@ Key assumptions:
               <div style={styles.small}>Primary output</div>
               <div style={{ fontSize: 14, fontWeight: 900, color: "#0f172a", marginTop: 2 }}>Owner TCE</div>
             </div>
-            <div style={{ ...styles.tceBox, marginTop: 0, minWidth: 320 }}>
+            <div style={{ ...styles.tceBox, marginTop: 0, minWidth: 360 }}>
               <div style={styles.tceTitle}>OWNER TCE</div>
               <div style={styles.tceValue}>
                 {round(result.tce_usd_per_day, 0)}{" "}
@@ -807,22 +807,23 @@ Key assumptions:
       <div
         style={{
           ...styles.grid,
-          gridTemplateColumns: isMobile ? "1fr" : "1.45fr 1fr",
+          gridTemplateColumns: isMobile ? "1fr" : "1fr 1.35fr",
           gap: isMobile ? 12 : 16,
           marginTop: isMobile ? 10 : 0,
         }}
       >
+        {/* LEFT: Setup + Editing */}
         <section style={styles.card}>
           <h2 style={{ margin: 0 }}>Setup</h2>
-          <div style={styles.small}>Desktop: full edit. Mobile: use Summary/Ports/Legs, and Full Edit only when needed.</div>
+          <div style={styles.small}>Desktop: full edit. Mobile: Summary/Ports/Legs + Full Edit only when needed.</div>
 
           <div style={styles.btnRow}>
-            <button style={styles.btnDanger} onClick={newVoyage}>New Voyage</button>
-            <button style={styles.btn} onClick={generateSummary}>Generate Summary</button>
+            <button type="button" style={styles.btnDanger} onClick={newVoyage}>New Voyage</button>
+            <button type="button" style={styles.btn} onClick={generateSummary}>Generate Summary</button>
             {isMobile && (
               <>
-                <button style={styles.btn} onClick={scrollToPortsTable}>Jump to Ports</button>
-                <button style={styles.btn} onClick={scrollToLegsTable}>Jump to Legs</button>
+                <button type="button" style={styles.btn} onClick={scrollToPortsTable}>Jump to Ports</button>
+                <button type="button" style={styles.btn} onClick={scrollToLegsTable}>Jump to Legs</button>
               </>
             )}
           </div>
@@ -855,10 +856,10 @@ Key assumptions:
           </div>
 
           <div style={styles.btnRow}>
-            <button style={styles.btn} onClick={applyRoundVoyage} disabled={voyageMode !== "round"}>Apply Round Voyage</button>
-            <button style={styles.btn} onClick={fillDistances}>Fill Distances</button>
-            <button style={styles.btn} onClick={saveAllLegs}>Save All Routes</button>
-            <button style={styles.btnDanger} onClick={clearSavedRoutesUI}>Clear Saved Routes</button>
+            <button type="button" style={styles.btn} onClick={applyRoundVoyage} disabled={voyageMode !== "round"}>Apply Round Voyage</button>
+            <button type="button" style={styles.btn} onClick={fillDistances}>Fill Distances</button>
+            <button type="button" style={styles.btn} onClick={saveAllLegs}>Save All Routes</button>
+            <button type="button" style={styles.btnDanger} onClick={clearSavedRoutesUI}>Clear Saved Routes</button>
           </div>
 
           {msg && <div style={{ ...styles.info, marginTop: 10 }}><b>{msg}</b></div>}
@@ -883,10 +884,10 @@ Key assumptions:
           <textarea style={{ ...styles.textarea, marginTop: 10 }} value={aiText} onChange={(e) => setAiText(e.target.value)} />
 
           <div style={styles.btnRow}>
-            <button style={styles.btnDark} onClick={runAI} disabled={aiLoading}>
+            <button type="button" style={styles.btnDark} onClick={runAI} disabled={aiLoading}>
               {aiLoading ? "AI Working..." : "AI Draft Itinerary"}
             </button>
-            <button style={styles.btn} onClick={applyAIDraft} disabled={!aiDraft}>
+            <button type="button" style={styles.btn} onClick={applyAIDraft} disabled={!aiDraft}>
               Apply to Tables
             </button>
           </div>
@@ -899,11 +900,10 @@ Key assumptions:
             </div>
           )}
 
-          {/* Mobile: show read-friendly ports/legs unless user chooses Full Edit */}
+          {/* Mobile simplified views */}
           {isMobile && mobileTab !== "edit" && (
             <>
               <div style={styles.divider} />
-
               {mobileTab === "summary" && (
                 <>
                   <h2 style={{ margin: 0 }}>Mobile Summary</h2>
@@ -919,27 +919,11 @@ Key assumptions:
                           {round(result.tce_usd_per_day, 0)} <span style={{ fontSize: 14, fontWeight: 900 }}>/day</span>
                         </div>
                       </div>
-
                       <div style={styles.sectionTitle}>Time</div>
                       <KV label="Sea days" value={round(result.sea_days_total, 2)} />
                       <KV label="Port days" value={round(result.port_days_total, 2)} />
                       <KV label="Waiting days" value={round(result.waiting_days_total, 2)} />
                       <KV label="Voyage days" value={round(result.voyage_days, 2)} />
-
-                      <div style={styles.divider} />
-
-                      <div style={styles.sectionTitle}>Bunkers</div>
-                      <KV label="Total required (mt)" value={round(result.bunkers_total, 1)} />
-                      <KV label="Purchased (mt)" value={round(result.bunkers_purchased_total, 1)} />
-                      <KV label="Bunker cost (USD)" value={round(result.bunker_cost, 0)} />
-
-                      {solver && (
-                        <>
-                          <div style={styles.divider} />
-                          <div style={styles.sectionTitle}>Freight solver ($/mt)</div>
-                          <KV label="Required freight (USD/mt)" value={round(solver.required_per_mt, 2)} />
-                        </>
-                      )}
                     </>
                   ) : (
                     <div style={styles.small}>Fill distances to compute results.</div>
@@ -950,21 +934,14 @@ Key assumptions:
               {mobileTab === "ports" && (
                 <>
                   <h2 style={{ margin: 0 }}>Ports (cards)</h2>
-                  <div style={styles.small}>Use Full Edit tab to change values. This view is for quick reading.</div>
                   <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
                     {portCalls.map((p, idx) => (
                       <div key={idx} style={{ border: "1px solid #e6eaf2", borderRadius: 14, padding: 12, background: "#ffffff" }}>
                         <div style={{ fontWeight: 900 }}>{p.name || `Port ${idx + 1}`}</div>
-                        <div style={styles.small}>
-                          Type: <b>{p.type}</b> • Port days: <b>{p.port_days || "0"}</b> • Waiting: <b>{p.waiting_days || "0"}</b>
-                        </div>
-                        <div style={styles.small}>
-                          Port cons: <b>{p.port_cons_mt_per_day || "0"}</b> • Port cost: <b>{p.port_cost_usd || "0"}</b>
-                        </div>
+                        <div style={styles.small}>Type: <b>{p.type}</b> • Port days: <b>{p.port_days || "0"}</b> • Waiting: <b>{p.waiting_days || "0"}</b></div>
+                        <div style={styles.small}>Port cons: <b>{p.port_cons_mt_per_day || "0"}</b> • Port cost: <b>{p.port_cost_usd || "0"}</b></div>
                         {(p.bunker_purchase_qty_mt || p.bunker_purchase_price_usd_per_mt) && (
-                          <div style={styles.small}>
-                            Bunker buy: <b>{p.bunker_purchase_qty_mt || "0"}</b> mt @ <b>{p.bunker_purchase_price_usd_per_mt || "0"}</b>
-                          </div>
+                          <div style={styles.small}>Bunker buy: <b>{p.bunker_purchase_qty_mt || "0"}</b> mt @ <b>{p.bunker_purchase_price_usd_per_mt || "0"}</b></div>
                         )}
                       </div>
                     ))}
@@ -975,14 +952,11 @@ Key assumptions:
               {mobileTab === "legs" && (
                 <>
                   <h2 style={{ margin: 0 }}>Legs (cards)</h2>
-                  <div style={styles.small}>Distances can be filled via Fill Distances / Full Edit.</div>
                   <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
                     {legs.map((l, idx) => (
                       <div key={idx} style={{ border: "1px solid #e6eaf2", borderRadius: 14, padding: 12, background: "#ffffff" }}>
                         <div style={{ fontWeight: 900 }}>{l.from || "?"} → {l.to || "?"}</div>
-                        <div style={styles.small}>
-                          Distance: <b>{l.distance_nm || "-"}</b> nm • Speed: <b>{l.speed_kn || "-"}</b> kn • Sea cons: <b>{l.cons_mt_per_day || "-"}</b>
-                        </div>
+                        <div style={styles.small}>Distance: <b>{l.distance_nm || "-"}</b> nm • Speed: <b>{l.speed_kn || "-"}</b> kn • Sea cons: <b>{l.cons_mt_per_day || "-"}</b></div>
                       </div>
                     ))}
                   </div>
@@ -991,7 +965,7 @@ Key assumptions:
             </>
           )}
 
-          {/* Full Edit (desktop always; mobile when chosen) */}
+          {/* Full edit */}
           {(!isMobile || mobileTab === "edit") && (
             <>
               <div style={styles.divider} />
@@ -1005,19 +979,17 @@ Key assumptions:
                   <select style={isMobile ? styles.selectTouch : styles.select} value={selectedSaveIdx} onChange={(e) => setSelectedSaveIdx(Number(e.target.value))}>
                     <option value={-1}>-- select --</option>
                     {savedList.map((v, idx) => (
-                      <option key={idx} value={idx}>
-                        {v.name || `Voyage ${idx + 1}`}
-                      </option>
+                      <option key={idx} value={idx}>{v.name || `Voyage ${idx + 1}`}</option>
                     ))}
                   </select>
                 </Field>
               </div>
 
               <div style={styles.btnRow}>
-                <button style={styles.btn} onClick={saveVoyageTemplate}>Save Voyage Template</button>
-                <button style={styles.btn} onClick={loadVoyageTemplate}>Load</button>
-                <button style={styles.btnDanger} onClick={deleteSelectedVoyage}>Delete</button>
-                <button style={styles.btn} onClick={exportCurrentVoyage}>Export JSON</button>
+                <button type="button" style={styles.btn} onClick={saveVoyageTemplate}>Save Voyage Template</button>
+                <button type="button" style={styles.btn} onClick={loadVoyageTemplate}>Load</button>
+                <button type="button" style={styles.btnDanger} onClick={deleteSelectedVoyage}>Delete</button>
+                <button type="button" style={styles.btn} onClick={exportCurrentVoyage}>Export JSON</button>
               </div>
 
               <Field label="Export JSON (copy/share)">
@@ -1025,7 +997,7 @@ Key assumptions:
               </Field>
 
               <div style={styles.btnRow}>
-                <button style={styles.btn} onClick={importVoyageFromJson}>Import JSON</button>
+                <button type="button" style={styles.btn} onClick={importVoyageFromJson}>Import JSON</button>
               </div>
 
               <Field label="Import JSON (paste from colleague)">
@@ -1035,7 +1007,6 @@ Key assumptions:
               <div style={styles.divider} />
 
               <div ref={portsTableRef} style={styles.sectionTitle}>Port calls</div>
-              <div style={styles.small}>On mobile, you can scroll this table left/right. If you hate this, use Ports tab (cards) for reading.</div>
               <div style={styles.hScroll}>
                 <table style={styles.table}>
                   <thead>
@@ -1080,7 +1051,6 @@ Key assumptions:
               <div style={styles.divider} />
 
               <div ref={legsTableRef} style={styles.sectionTitle}>Legs</div>
-              <div style={styles.small}>On mobile, scroll this table left/right. Use Legs tab for reading.</div>
               <div style={styles.hScroll}>
                 <table style={styles.table}>
                   <thead>
@@ -1101,7 +1071,7 @@ Key assumptions:
                         <td style={styles.td}><input style={isMobile ? styles.inputTouch : styles.input} value={l.distance_nm} onChange={(e) => updateLeg(idx, "distance_nm", e.target.value, setLegs)} /></td>
                         <td style={styles.td}><input style={isMobile ? styles.inputTouch : styles.input} value={l.speed_kn} onChange={(e) => updateLeg(idx, "speed_kn", e.target.value, setLegs)} /></td>
                         <td style={styles.td}><input style={isMobile ? styles.inputTouch : styles.input} value={l.cons_mt_per_day} onChange={(e) => updateLeg(idx, "cons_mt_per_day", e.target.value, setLegs)} /></td>
-                        <td style={styles.td}><button style={styles.miniBtn} onClick={() => saveLeg(idx)}>Save</button></td>
+                        <td style={styles.td}><button type="button" style={styles.miniBtn} onClick={() => saveLeg(idx)}>Save</button></td>
                       </tr>
                     ))}
                   </tbody>
@@ -1158,7 +1128,7 @@ Key assumptions:
           )}
         </section>
 
-        {/* Desktop right column Results */}
+        {/* RIGHT: Results */}
         {!isMobile && (
           <section style={styles.card}>
             <h2 style={{ margin: 0 }}>Results</h2>
