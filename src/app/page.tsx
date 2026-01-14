@@ -85,7 +85,7 @@ const styles: Record<string, React.CSSProperties> = {
   subtitle: { margin: "6px 0 0", color: "#4b5563", lineHeight: 1.35 },
   badge: { padding: "8px 10px", borderRadius: 12, background: "#eef4ff", border: "1px solid #d7e3ff", color: "#1e3a8a", fontWeight: 800, fontSize: 12, whiteSpace: "nowrap" },
 
-  grid: { display: "grid", gridTemplateColumns: "1.45fr 1fr", gap: 16 },
+  grid: { display: "grid", gridTemplateColumns: "1.1fr 1fr", gap: 16 },
 
   card: { background: "#ffffff", border: "1px solid #e6eaf2", padding: 16, borderRadius: 14, boxShadow: "0 6px 18px rgba(20, 30, 60, 0.06)" },
   sectionTitle: { margin: "14px 0 8px", fontSize: 15, color: "#0f172a" },
