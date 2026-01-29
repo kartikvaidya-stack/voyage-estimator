@@ -96,10 +96,13 @@ export function calcItinerary(voyage) {
   const bunker_cost =
     bunkers_purchased_total > 0 ? bunker_cost_from_purchases : bunker_cost_fallback;
 
+  // ECA fuel surcharge (if provided)
+  const eca_surcharge_usd = Number(voyage?.eca_surcharge_usd || 0);
+
   const canal_tolls_usd = Number(costs.canal_tolls_usd || 0);
   const other_costs_usd = Number(costs.other_costs_usd || 0);
 
-  const voyage_costs_total = bunker_cost + port_cost_total + canal_tolls_usd + other_costs_usd;
+  const voyage_costs_total = bunker_cost + eca_surcharge_usd + port_cost_total + canal_tolls_usd + other_costs_usd;
 
   // --- Revenue ---
   const cargo_qty_mt = Number(revenue.cargo_qty_mt || 0);
@@ -148,6 +151,7 @@ export function calcItinerary(voyage) {
     bunker_cost,
     bunker_cost_method: bunkers_purchased_total > 0 ? "purchase_plan" : "blended_price",
 
+    eca_surcharge_usd,
     port_cost_total,
     canal_tolls_usd,
     other_costs_usd,

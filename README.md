@@ -1,36 +1,53 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+## Voyage Estimator
 
-## Getting Started - test
+Modern voyage war-room for operators who need to price, narrate, and defend fixtures in minutes. The app couples a deterministic itinerary engine with map-derived routing, ECA compliance modeling, AI-assisted drafting, scenario analysis, and emission stats.
 
-First, run the development server:
+### Features
+- Hero workspace with live TCE, profit, and duration metrics
+- AI itinerary drafting with bunker blending rules
+- Leaflet-based routing with sea-lane snapping + ECA overlays
+- Scenario desk (eco, express, bunker shock, freight push) + sensitivity table
+- Emission lens (CO₂ totals, intensity) + data hygiene warnings
+- Device-aware layout (summary / ports / legs tabs on mobile)
+  
+### Local development
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Environment variables:
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+```
+OPENAI_API_KEY=sk-...
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Project layout
 
-## Learn More
+- `src/app/page.tsx` — core planner UI + intelligence deck
+- `src/components/VoyageMap.tsx` — map, routing, and ECA overlays
+- `src/lib/itineraryCalc.js` — deterministic voyage math
+- `src/lib/analytics.ts` — scenario + emissions + validation helpers
+- `src/app/api/itinerary/route.js` — AI drafting endpoint (JSON-only)
 
-To learn more about Next.js, take a look at the following resources:
+### External data sources to evaluate next
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+**Sea distance & routing APIs**
+- **Datalastic Sea Route API** — REST endpoint that snaps voyages to commercial sea lanes and returns great-circle distance, ETA, and intermediate waypoints; requires API key and credits but integrates cleanly with `libs/seaRouting` as a fallback when user ports are off-network.
+- **MarineTraffic Voyage Planner API** — paid tier exposes bunker-optimized routing and distance matrices; useful for validating our Leaflet-derived distances and augmenting ECA exposure data.
+- **AtoBviaC Web Service** — long-standing industry calculator that exposes SOAP/REST routes with mandatory-waypoint controls; ideal for sanity-checking polar or canal-heavy passages.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+**Port cost & DA intelligence**
+- **PortLog API (Marcura)** — JSON API for historical disbursement accounts, tariffs, and turnaround benchmarks; can drive the `port_cost_usd` defaults per port call.
+- **DIABOS / DA-Desk API** — provides pro-forma DA estimates, agency fees, and live cost updates; helpful for automatically populating towage/pilotage components in the planner.
+- **SeaRates Port Charges API** — commercial REST feed with published dues (port, canal, storage) structured by port and vessel class; lightweight enough to surface indicative costs when users add a new port.
 
-## Deploy on Vercel
+Plan: wrap each provider inside `src/lib/dataProviders` with caching + graceful degradation so the estimator falls back to manual inputs whenever an external API quota is hit.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Testing checklist
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. `npm run lint` — Next.js eslint config
+2. Manual: ensure map loads (Leaflet CSS imported via globals)
+3. Manual: verify OpenAI API key present before AI drafting
+
