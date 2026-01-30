@@ -1881,6 +1881,7 @@ Key assumptions:
         {/* LEFT: Setup + Editing */}
         {(isMobile || ["create", "ports", "distance", "vessels", "bunker", "json"].includes(viewTab)) && (
         <section style={{ ...styles.card, ...(isMobile ? {} : styles.controlColumn) }}>
+          
           {viewTab === "create" && (
             <>
               {isMobile && (
@@ -2055,27 +2056,7 @@ Key assumptions:
                     </div>
                   )}
 
-                  {viewTab === "json" && (
-                    <div style={{ ...styles.card, background: "#ffffff", border: "1px dashed #cbd5e1", marginTop: 8 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                        <div style={styles.sectionTitle}>JSON exchange (export/import)</div>
-                        <button type="button" style={styles.miniBtn} onClick={() => setNavTab("create")}>Close</button>
-                      </div>
-
-                      <Field label="Export JSON (copy/share)">
-                        <textarea style={{ ...styles.textarea, minHeight: 90 }} value={exportJson} onChange={(e) => setExportJson(e.target.value)} placeholder="Click Export JSON to populate" />
-                      </Field>
-
-                      <Field label="Import JSON">
-                        <textarea style={{ ...styles.textarea, minHeight: 90 }} value={importJson} onChange={(e) => setImportJson(e.target.value)} placeholder="Paste JSON then click Import" />
-                      </Field>
-
-                      <div style={styles.btnRow}>
-                        <button type="button" style={styles.btn} onClick={importVoyageFromJson}>Import JSON</button>
-                        <button type="button" style={styles.btn} onClick={() => setImportJson("")}>Clear import</button>
-                      </div>
-                    </div>
-                  )}
+                  
 
                   <div style={styles.divider} />
 
@@ -2394,6 +2375,7 @@ Key assumptions:
 
           {(viewTab === "distance" || (viewTab === "create" && plannerTab === "distanceMatrix")) && (
             <>
+            
               <h2 style={{ margin: 0 }}>Distance matrix</h2>
               <p style={styles.panelSubtitle}>View and edit your saved sea legs. Auto-fill prefers these entries before defaults.</p>
 
