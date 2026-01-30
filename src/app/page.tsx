@@ -56,7 +56,7 @@ type CostsUI = {
 };
 
 type PlannerTab = "planner" | "portCosts" | "distanceMatrix";
-type ViewTab = "create" | "results" | "analysis" | "ports" | "distance" | "guide" | "vessels" | "bunker";
+type ViewTab = "create" | "results" | "analysis" | "ports" | "distance" | "guide" | "vessels" | "bunker" | "json";
 type RouteEntry = { from: string; to: string; distance: number };
 
 type VoyageUI = {
@@ -1510,7 +1510,7 @@ export default function Page() {
   function exportCurrentVoyage() {
     const v = makeVoyageSnapshot("Export");
     setExportJson(JSON.stringify(v, null, 2));
-    setShowJsonExchange(true);
+    setNavTab("json");
     setMsg("Export JSON generated. Expand JSON panel to copy/share.");
   }
 
@@ -1824,6 +1824,9 @@ Key assumptions:
           <button type="button" style={viewTab === "vessels" ? styles.tabActive : styles.tab} onClick={() => setNavTab("vessels")}>
             Vessels
           </button>
+          <button type="button" style={viewTab === "json" ? styles.tabActive : styles.tab} onClick={() => setNavTab("json")}>
+            JSON
+          </button>
           <button type="button" style={viewTab === "bunker" ? styles.tabActive : styles.tab} onClick={() => setNavTab("bunker")}>
             Bunker
           </button>
@@ -1876,7 +1879,7 @@ Key assumptions:
         )}
 
         {/* LEFT: Setup + Editing */}
-        {(isMobile || ["create", "ports", "distance", "vessels", "bunker"].includes(viewTab)) && (
+        {(isMobile || ["create", "ports", "distance", "vessels", "bunker", "json"].includes(viewTab)) && (
         <section style={{ ...styles.card, ...(isMobile ? {} : styles.controlColumn) }}>
           {viewTab === "create" && (
             <>
@@ -2024,7 +2027,7 @@ Key assumptions:
                     <button type="button" style={styles.btn} onClick={saveVoyageTemplate}>Save Voyage Template</button>
                     <button type="button" style={styles.btn} onClick={loadVoyageTemplate}>Load</button>
                     <button type="button" style={styles.btnDanger} onClick={deleteSelectedVoyage}>Delete</button>
-                    <button type="button" style={styles.btn} onClick={() => setShowJsonExchange((v) => !v)}>{showJsonExchange ? "Hide JSON panel" : "Show JSON panel"}</button>
+                    <button type="button" style={styles.btn} onClick={() => setNavTab("json")}>Open JSON panel</button>
                     <button type="button" style={styles.btn} onClick={exportCurrentVoyage}>Export JSON</button>
                   </div>
 
@@ -2052,11 +2055,11 @@ Key assumptions:
                     </div>
                   )}
 
-                  {showJsonExchange && (
+                  {viewTab === "json" && (
                     <div style={{ ...styles.card, background: "#ffffff", border: "1px dashed #cbd5e1", marginTop: 8 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                         <div style={styles.sectionTitle}>JSON exchange (export/import)</div>
-                        <button type="button" style={styles.miniBtn} onClick={() => setShowJsonExchange(false)}>Close</button>
+                        <button type="button" style={styles.miniBtn} onClick={() => setNavTab("create")}>Close</button>
                       </div>
 
                       <Field label="Export JSON (copy/share)">
@@ -2073,10 +2076,6 @@ Key assumptions:
                       </div>
                     </div>
                   )}
-
-                  <Field label="Import JSON (paste from colleague)">
-                    <textarea style={{ ...styles.textarea, minHeight: 120 }} value={importJson} onChange={(e) => setImportJson(e.target.value)} />
-                  </Field>
 
                   <div style={styles.divider} />
 
